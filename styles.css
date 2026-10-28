@@ -901,3 +901,36 @@ input[type=range].unset{opacity:.45}
 .home-logo{border-radius:28px;width:min(280px,58vw)}
 .tb-home{border-radius:12px;overflow:hidden}
 .tb-home img{border-radius:10px}
+
+/* v1.1.0 — observateur, échelle des piliers, saisie clavier */
+.obs-tile .name{font-size:22px}
+.obs-bar .row{gap:10px}
+.obs-who{font-size:20px;flex:1}
+.obs-fb{margin-top:8px;font-weight:700;background:var(--blue-l);border-radius:12px;padding:8px 12px}
+.obs-fb .wv{margin:0 2px}
+.obs-by{font-weight:700;color:var(--grey)}
+.sug-wrap{margin-bottom:10px}
+.sug-h{font-weight:900;margin:6px 0}
+.tiles.one{grid-template-columns:minmax(0,420px)}
+.tile.sug{border-width:4px;border-color:var(--orange);background:var(--orange-l);min-height:120px}
+.tile.sug .name{font-size:28px}
+.num-in{display:inline-flex;align-items:center;gap:6px;font-weight:800}
+.num-in input{width:120px;min-height:56px;font-size:26px;font-weight:900;text-align:center;padding:4px 6px}
+.cf .num-in input{width:96px;font-size:22px;min-height:48px}
+.kg-in .x{font-size:28px;color:var(--grey)}
+.pil-row{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;align-items:stretch;margin-top:10px}
+.pil-row .dial-card{display:flex;flex-direction:column;justify-content:center}
+.pil-scale{border:3px solid #8A2BE2;border-radius:var(--radius);padding:10px 12px;background:#FBF8FF;display:flex;flex-direction:column;gap:8px}
+.pil-cr{margin:0;padding-left:20px;font-weight:800;font-size:16px}
+.bands{display:grid;gap:3px}
+.band-l{border:2px solid var(--line);border-radius:8px;padding:3px 8px;font-size:15px;font-weight:700;background:#fff}
+.band-l b{display:inline-block;min-width:58px}
+.band-l.on{border-color:#8A2BE2;background:#8A2BE2;color:#fff}
+.fq-h{font-weight:900;font-size:14px;color:var(--grey)}
+.fq-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.fq{min-height:46px;border:3px solid var(--navy);border-radius:10px;background:#fff;font-weight:800;font-size:13px;color:var(--navy);padding:2px}
+.fq.on{background:var(--navy);color:#fff}
+.succ-row{min-height:8px}
+.succ{display:inline-block;font-weight:900;padding:4px 14px;border-radius:999px;font-size:16px}
+.pil-mini{display:inline-block;padding:0 6px;border-radius:8px;font-weight:800}
+@media (max-width:700px){ .pil-row{grid-template-columns:1fr} .fq-row{grid-template-columns:repeat(3,minmax(0,1fr))} }

@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.1.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -25,7 +25,7 @@ const MACHINES = [
   { id:'chest_press', n:'Chest Press', img:'machines/Chest Press.png', g:'pec', k:'ch', z:[...Z_ARMS] },
   { id:'butterfly', n:'Butterfly', img:'machines/Butterfly.png', g:'pec', k:'ch', z:['epD','epG','brD','brG'] },
   { id:'pompes', n:'Pompes', img:'machines/Pompes.png', g:'pec', k:'pdc', z:[...Z_ARMS] },
-  { id:'dips', n:'Dips', ico:'🤸', g:'pec', k:'pdc', z:[...Z_ARMS] },
+  { id:'dips', n:'Dips', img:'machines/Dips.png', g:'pec', k:'pdc', z:[...Z_ARMS] },
   { id:'tirage_vertical', n:'Tirage Vertical', img:'machines/Tirage Vertical.png', g:'dos', k:'ch', z:[...Z_ARMS] },
   { id:'tirage_assis', n:'Tirage assis', img:'machines/Tirage Assis.png', g:'dos', k:'ch', z:[...Z_ARMS, 'dos'] },
   { id:'rowing', n:'Rowing', img:'machines/Rowing.png', g:'dos', k:'ch', z:[...Z_ARMS, 'dos', 'lom'] },
@@ -39,10 +39,10 @@ const MACHINES = [
   { id:'legcurl', n:'Leg Extension', img:'machines/Leg Extension.png', g:'jam', k:'ch', z:['cuD','cuG','geD','geG'] },
   { id:'ischios', n:'Ischios', img:'machines/ischios.png', g:'jam', k:'ch', z:['cuD','cuG','geD','geG','lom'] },
   { id:'chaise_romaine', n:'Chaise Romaine', img:'machines/Chaise Romaine.png', g:'tronc', k:'pdc', z:['epD','epG','brD','brG','han','lom','ven'] },
-  { id:'abdos', n:'Abdos', ico:'🧘', g:'tronc', k:'pdc', z:['ven','cou','lom'] },
+  { id:'abdos', n:'Abdos', img:'machines/Abdos.png', g:'tronc', k:'pdc', z:['ven','cou','lom'] },
   { id:'velo', n:'Vélo', img:'machines/Velo.png', g:'cardio', k:'cardio', z:['cuD','cuG','geD','geG','han'] },
   { id:'tapis', n:'Tapis de course', img:'machines/Tapis de course.png', g:'cardio', k:'cardio', z:[...Z_LEGS, 'han'] },
-  { id:'ellip', n:'Elliptique', ico:'🚶', g:'cardio', k:'cardio', z:[...Z_LEGS, 'han'] },
+  { id:'ellip', n:'Elliptique', img:'machines/Elliptique.png', g:'cardio', k:'cardio', z:[...Z_LEGS, 'han'] },
 ];
 const machine = id => MACHINES.find(m => m.id === id) || null;
 const mName = id => machine(id)?.n || id || '?';
@@ -472,6 +472,15 @@ function pilMeans(n, sid){                     // moyenne de chaque pilier sur l
   lessonPils(n).forEach(p => { const v = vals((r.ex || []).flatMap(E => vals(E.ob?.[p.id]))); if (v.length) out[p.id] = avg(v); });
   return out;
 }
+/* notes de piliers données par un observateur pendant une leçon (ob = null : tous les observateurs) */
+function obsGiven(n, ob){ const out = [];
+  Object.values(S.results[n] || {}).forEach(r => (r.ex || []).forEach(E => { if (!E.by || E.by === 'x' || (ob && E.by !== ob)) return; Object.values(E.ob || {}).forEach(a => out.push(...vals(a))); }));
+  return out; }
+/* binômes : dernier élève observé par chaque observateur (d'après les saisies) */
+function pairsFromResults(){ const best = {};
+  Object.values(S.results).forEach(byS => Object.entries(byS).forEach(([sid, r]) => (r.ex || []).forEach(E => { if (!E.by || E.by === 'x') return; const ts = E.ts || r.ts || 0;
+    if (!best[E.by] || ts > best[E.by].ts) best[E.by] = { sid, ts }; })));
+  return Object.fromEntries(Object.entries(best).map(([k, v]) => [k, v.sid])); }
 const repsDone = E => vals(E.sets).reduce((a, b) => a + b, 0);
 const setsDone = E => vals(E.sets).length;
 function exDone(n, sid, E){ if (E.k === 'max') return E.v > 0; const t = target(n, sid, E); return t && t.s ? setsDone(E) >= t.s : setsDone(E) > 0; }
@@ -648,17 +657,36 @@ function viewSaisie(){
       return `<button class="grp-btn" data-action="pickGroup" data-g="${g}"><span class="sw" style="background:${c?c.c:'#ccc'}"></span>${groupName(g)}<small>${nb} élève(s)</small></button>`; }).join('')}
       <button class="grp-btn all" data-action="pickGroup" data-g="all">Toute la classe</button></div>`;
   }
+  const grpBtn = nbGroups() > 1 ? `<button class="btn small" data-action="pickGroup" data-g="">🎽 ${UI.filter && UI.filter !== 'all' ? groupName(UI.filter) + ' · changer' : 'Changer de groupe'}</button>` : '';
   const list = sortedStudents().filter(s => present(n, s.id) && passFilter(s));
-  const off = S.students.filter(s => !present(n, s.id)).length;
-  return `<div class="card strong"><div class="row"><b style="font-size:20px" class="grow">👀 Qui observes-tu ?</b>
-      ${nbGroups() > 1 ? `<button class="btn small" data-action="pickGroup" data-g="">🎽 ${UI.filter && UI.filter !== 'all' ? groupName(UI.filter) + ' · changer' : 'Changer de groupe'}</button>` : ''}</div>
-      <div class="muted" style="font-weight:700">L'observateur tient la tablette : il choisit l'élève qui travaille, puis l'exercice réalisé.${off ? ` · ${off} absent(s)/dispensé(s) masqué(s)` : ''}</div></div>
-    <div class="tiles">${list.map(s => saisieTile(n, s)).join('') || '<p>Aucun élève dans ce groupe.</p>'}</div>`;
+  const ob = S.curObs;
+  /* 1. Qui es-tu ? (l'observateur tient la tablette) */
+  if (!ob) return `<div class="card strong"><div class="row"><b style="font-size:22px" class="grow">👤 Qui es-tu ?</b>${grpBtn}</div>
+      <div class="muted" style="font-weight:700">Tu tiens la tablette et tu observes un camarade. Touche ton prénom.</div></div>
+    <div class="tiles">${list.map(s => `<button class="tile obs-tile" data-action="pickObs" data-sid="${s.id}">${band(s.id)}<span class="name">${esc(nameOf(s.id))}</span>${S.pairs?.[s.id] && student(S.pairs[s.id]) ? `<span class="meta">observe d'habitude ${esc(nameOf(S.pairs[s.id]))}</span>` : ''}</button>`).join('')}
+      <button class="tile obs-tile" data-action="pickObs" data-sid="x"><span class="name">👩‍🏫 Enseignant</span><span class="meta">ou observateur absent de la liste</span></button></div>`;
+  /* 2. Qui observes-tu ? (le partenaire habituel en premier) */
+  const pair = S.pairs?.[ob], others = list.filter(s => s.id !== ob && s.id !== pair);
+  const sug = pair && list.some(s => s.id === pair) ? pair : null;
+  return `<div class="card strong obs-bar"><div class="row"><span class="obs-who">👤 Observateur : <b>${ob === 'x' ? 'Enseignant' : esc(nameOf(ob))}</b></span>
+      <button class="btn small" data-action="changeObs">🔁 Changer d'observateur</button>${grpBtn}</div>${ob !== 'x' ? obsFeedback(n, ob) : ''}</div>
+    <div class="card strong"><b style="font-size:22px">👀 Qui observes-tu ?</b>${sug ? '' : '<div class="muted" style="font-weight:700">Ton choix sera proposé en premier les prochaines fois.</div>'}</div>
+    ${sug ? `<div class="sug-wrap"><div class="sug-h">⭐ Ton partenaire habituel</div><div class="tiles one">${saisieTile(n, student(sug), true)}</div><div class="sug-h muted">Ou quelqu'un d'autre :</div></div>` : ''}
+    <div class="tiles">${others.map(s => saisieTile(n, s)).join('') || '<p>Aucun autre élève dans ce groupe.</p>'}</div>`;
 }
-function saisieTile(n, s){
+/* Retour à l'observateur : moyenne des notes qu'il a données (piliers) comparée à celle de la classe */
+function obsFeedback(n, ob){
+  const mine = obsGiven(n, ob), all = obsGiven(n, null);
+  if (!mine.length) return `<div class="obs-fb muted">📊 Tes notes du jour s'afficheront ici : moyenne des notes que tu donnes sur les piliers.</div>`;
+  const m = avg(mine), c = all.length > mine.length ? avg(all) : null, d = c == null ? 0 : m - c;
+  const tip = c == null ? '' : d > 1.5 ? '🤔 Tu notes plus large que les autres observateurs : vérifie bien chaque critère avant de donner 9 ou 10.'
+    : d < -1.5 ? '🤔 Tu notes plus sévèrement que les autres observateurs : compte bien les critères réussis.' : '👍 Tes notes sont proches de celles des autres observateurs.';
+  return `<div class="obs-fb">📊 Tes notes aujourd'hui : moyenne ${chipV(m)} sur ${mine.length} note(s)${c != null ? ` · moyenne des observateurs ${chipV(c)}` : ''}${tip ? `<div>${tip}</div>` : ''}</div>`;
+}
+function saisieTile(n, s, sug){
   const st = lessonState(n, s.id), M = MOB[mobOf(n, s.id)], z = zonesOf(n, s.id);
   const done = st.plan ? st.done >= st.plan : false;
-  return `<button class="tile ${done ? 'done' : ''}" data-action="entry" data-sid="${s.id}">${band(s.id)}${done ? '<span class="check">✓</span>' : ''}
+  return `<button class="tile ${done ? 'done' : ''} ${sug ? 'sug' : ''}" data-action="entry" data-sid="${s.id}">${band(s.id)}${done ? '<span class="check">✓</span>' : ''}
     <span class="name">${esc(nameOf(s.id))}</span>
     ${M ? `<span class="target">${M.ico} ${esc(M.n)}</span>` : ''}
     ${z.length || attOf(n, s.id) === 'inap' ? `<span class="tag inapte">🩹 ${esc(z.map(zoneName).join(', ') || 'Inaptitude')}</span>` : ''}
@@ -677,6 +705,7 @@ function viewEntry(){
   const i = list.findIndex(x => x.id === sid), prev = list[i-1], next = list[i+1];
   let h = `<div class="entry-name">${band(sid)}<div class="who">${esc(nameOf(sid))}</div><span class="saved" id="saved-flag"></span>
     <span class="theme-badge" style="background:${T.c}">${T.ico} ${esc(T.n)}</span>
+    ${S.curObs ? `<span class="obs-by">👀 observé par <b>${S.curObs === 'x' ? 'l\'enseignant' : esc(nameOf(S.curObs))}</b></span>` : ''}
     <button class="btn" data-action="go" data-view="saisie" style="margin-left:auto">← Élèves</button></div>`;
   h += startBlock(n, sid, r);
   h += wuBlock(n, sid, r);
@@ -791,9 +820,9 @@ function maxBody(n, sid, E){
   const pdc = isPdc(E.m), modes = pdc ? ['reps'] : ['1rm','brz'];
   const prev = maxHist(sid, E.m).filter(x => !(x.n === n && x.src !== 'prof')).pop();
   let h = `<div class="max-body"><div class="seg max-seg">${modes.map(md => `<button class="${E.mode === md ? 'on norm' : ''}" data-action="maxMode" data-e="${E.id}" data-v="${md}">${esc(MAX_MODES[md])}</button>`).join('')}</div>`;
-  if (E.mode === '1rm' || E.mode === 'brz') h += `<div class="kg-in"><span class="lbl">${E.mode === '1rm' ? 'Charge la plus lourde soulevée 1 fois' : 'Charge soulevée'}</span>${kgStepper(E)}</div>`;
-  if (E.mode === 'brz') h += `<div class="kg-in"><span class="lbl">Répétitions réalisées (2 à ${BRZ_MAX_R})</span>${repStepper(E, 2, BRZ_MAX_R)}</div>`;
-  if (E.mode === 'reps') h += `<div class="kg-in"><span class="lbl">Nombre de répétitions réalisées</span>${repStepper(E, 1, 150)}</div>`;
+  if (E.mode === '1rm') h += `<div class="kg-in"><span class="lbl">Charge la plus lourde soulevée 1 fois</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}</div>`;
+  if (E.mode === 'brz') h += `<div class="kg-in"><span class="lbl">Charge soulevée</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}<b class="x">×</b>${numIn('maxR', E, E.r, 'répétitions', 1, BRZ_MAX_R)}<span class="lbl">(2 à ${BRZ_MAX_R})</span></div>`;
+  if (E.mode === 'reps') h += `<div class="kg-in"><span class="lbl">Nombre de répétitions réalisées</span>${numIn('maxR', E, E.r, 'répétitions', 1, 150)}</div>`;
   const v = maxFromEntry(E);
   h += `<div class="max-res ${v ? 'on' : ''}"><div><span class="lbl">${E.mode === 'brz' ? 'Max estimé (Brzycki)' : 'Mon max'}</span><b>${v ? fmtMax(E.m, v) : '—'}</b></div>
     ${prev ? `<div><span class="lbl">Avant (L${prev.n})</span><b>${fmtMax(E.m, prev.v)}</b></div>${v ? `<div><span class="lbl">Évolution</span><b class="${v >= prev.v ? 'up' : 'down'}">${v >= prev.v ? '▲' : '▼'} ${pdc ? Math.round(v - prev.v) + ' rép.' : fmtKg(Math.abs(v - prev.v))}</b></div>` : ''}` : ''}</div>`;
@@ -803,21 +832,36 @@ function maxBody(n, sid, E){
   h += `</div>` + pilDials(n, E, 0, 'Fin de la prise de max');
   return h;
 }
-function kgStepper(E){
-  return `<div class="kg-step"><button data-action="kgStep" data-e="${E.id}" data-d="-5">−5</button><button data-action="kgStep" data-e="${E.id}" data-d="-1">−1</button>
-    <button class="kg-val" data-action="kgType" data-e="${E.id}">${E.kg ? fmtKg(E.kg) : 'Charge ?'}</button>
-    <button data-action="kgStep" data-e="${E.id}" data-d="1">+1</button><button data-action="kgStep" data-e="${E.id}" data-d="5">+5</button></div>`;
+/* boîte de saisie au clavier (charge, répétitions…) */
+function numIn(f, E, v, unit, step, max, extra=''){
+  return `<label class="num-in"><input type="number" inputmode="${step < 1 ? 'decimal' : 'numeric'}" step="${step}" min="0" max="${max}" data-field="${f}" data-e="${E.id}" ${extra} value="${v ?? ''}" placeholder="–"><span>${unit}</span></label>`;
 }
-function repStepper(E, min, max){
-  return `<div class="kg-step"><button data-action="rStep" data-e="${E.id}" data-d="-1" data-min="${min}" data-max="${max}">−</button>
-    <button class="kg-val" data-action="rType" data-e="${E.id}" data-min="${min}" data-max="${max}">${E.r ? E.r + ' rép.' : 'Rép. ?'}</button>
-    <button data-action="rStep" data-e="${E.id}" data-d="1" data-min="${min}" data-max="${max}">+</button></div>`;
+/* Piliers : roue crantée (0 → 10) + échelle des critères + fréquence + couleur de réussite, l'une sous l'autre */
+const FREQ = ['Jamais','Rarement','Parfois','Souvent','Très souvent','Toujours'];
+const critLv = v => v == null ? null : v >= 9 ? 3 : v >= 6 ? 2 : v >= 3 ? 1 : 0;
+const BANDS = [[3,'Tous les critères appliqués','9 ou 10'],[2,'Il manque un critère','6 à 8'],[1,'Il manque deux critères','3 à 5'],[0,'Aucun critère','0 à 2']];
+const bandLbl = v => v == null ? 'palier' : ['aucun critère','manque 2 critères','manque 1 critère','tous les critères'][critLv(v)];
+const SUCC = { vf:{ n:'Réussite', c:'#0B4F1C', f:'#fff' }, vc:{ n:'Presque réussi', c:'#86DC96', f:'#0A1633' }, j:{ n:'En cours', c:'#FFD000', f:'#0A1633' }, o:{ n:'Fragile', c:'#F07000', f:'#fff' }, r:{ n:'Non réussi', c:'#D0161B', f:'#fff' } };
+function succOf(v, fq){
+  if (v == null) return null; const c = critLv(v);
+  if (fq == null) return c === 3 ? 'vf' : c === 2 ? 'j' : c === 1 ? 'o' : 'r';
+  if (c === 3 && fq >= 4) return 'vf';
+  if (c === 3 && fq === 3) return 'vc';
+  if ((c === 3 && fq >= 1) || (c === 2 && fq >= 3)) return 'j';
+  if ((c === 2 && fq >= 1) || (c === 1 && fq >= 3)) return 'o';
+  return 'r';
 }
-/* Molettes des piliers (une série ou fin d'exercice) */
+const succChip = k => k ? `<span class="succ" style="background:${SUCC[k].c};color:${SUCC[k].f}">${SUCC[k].n}</span>` : '';
+const withFreq = E => !(E.k === 'max' && E.mode === '1rm');
 function pilDials(n, E, i, title){
   const P = lessonPils(n); if (!P.length) return '';
-  return `<div class="pil-dials"><div class="pd-h">👀 ${esc(title)}</div><div class="dials">${P.map(p => { const v = E.ob?.[p.id]?.[i] ?? null;
-    return `<div class="dial-card pil"><h3>${p.ico} ${esc(p.n)}</h3>${dialHTML({ v, min:1, max:10, kind:'pil', lbl: v ? PIL_LBL[v-1] : 'palier' }, `data-e="${E.id}" data-i="${i}" data-p="${p.id}"`)}</div>`; }).join('')}</div></div>`;
+  const wf = withFreq(E);
+  return `<div class="pil-dials"><div class="pd-h">👀 ${esc(title)}</div>${P.map(p => { const v = E.ob?.[p.id]?.[i] ?? null, fq = E.fq?.[p.id]?.[i] ?? null, cl = critLv(v);
+    return `<div class="pil-row"><div class="dial-card pil"><h3>${p.ico} ${esc(p.n)}</h3>${dialHTML({ v, min:0, max:10, kind:'pil', lbl: bandLbl(v) }, `data-e="${E.id}" data-i="${i}" data-p="${p.id}"`)}</div>
+      <div class="pil-scale"><ul class="pil-cr">${p.cr.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+        <div class="bands">${BANDS.map(([k, t, r]) => `<div class="band-l ${cl === k ? 'on' : ''}"><b>${r}</b> ${t}</div>`).join('')}</div>
+        ${wf ? `<div class="fq-h">Fréquence${v != null ? '' : ' (après la note)'}</div><div class="fq-row">${FREQ.map((f, k) => `<button class="fq ${fq === k ? 'on' : ''}" data-action="fq" data-e="${E.id}" data-i="${i}" data-p="${p.id}" data-v="${k}">${f}</button>`).join('')}</div>` : ''}
+        <div class="succ-row">${succChip(wf ? (fq == null ? null : succOf(v, fq)) : succOf(v, null))}</div></div></div>`; }).join('')}</div>`;
 }
 /* Séries : suivi série par série (molette répétitions + piliers) ou en fin d'exercice */
 function setsBody(n, sid, E, t){
@@ -845,17 +889,16 @@ function setsBody(n, sid, E, t){
     ${first < 0 ? `<span class="pass-ok">✓ ${nbS} séries · ${repsDone(E)} rép.</span>` : ''}</div>`;
   h += `<div class="dials set-dials"><div class="dial-card"><h3>🔁 Série ${cur + 1} / ${nbS} · répétitions validées</h3>
       ${dialHTML({ v: sets[cur], min:0, max:maxR, t:r, kind:'reps', lbl:'répétitions' }, `data-e="${E.id}" data-i="${cur}"`)}
-      <button class="btn small green" data-action="setOk" data-e="${E.id}" data-i="${cur}">✓ ${r} réussies</button></div>
-    ${lessonPils(n).map(p => { const v = E.ob?.[p.id]?.[cur] ?? null;
-      return `<div class="dial-card pil"><h3>${p.ico} ${esc(p.n)}</h3>${dialHTML({ v, min:1, max:10, kind:'pil', lbl: v ? PIL_LBL[v-1] : 'palier' }, `data-e="${E.id}" data-i="${cur}" data-p="${p.id}"`)}</div>`; }).join('')}</div>`;
+      <button class="btn small green" data-action="setOk" data-e="${E.id}" data-i="${cur}">✓ ${r} réussies</button></div></div>
+    ${pilDials(n, E, cur, `Série ${cur + 1} · niveau d'atteinte des piliers`)}`;
   h += `<div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn primary" data-action="setNext" data-e="${E.id}" data-i="${cur}" ${sets[cur] == null ? 'disabled' : ''}>${cur + 1 < nbS ? `Valider la série ${cur + 1} et lancer la récup (${fmtRest(t.rest)}) →` : '✓ Valider la dernière série'}</button></div>`;
   return h;
 }
 /* Exercice adapté (inaptitude) ou exercice du programme (Coach d'un jour) : paramètres modifiables */
 function customFields(n, sid, E, t){
-  const st = (f, label, val, unit, d) => `<div class="cf"><span class="lbl">${label}</span><div class="kg-step sm"><button data-action="cfStep" data-e="${E.id}" data-f="${f}" data-d="-${d}">−</button><button class="kg-val" data-action="cfType" data-e="${E.id}" data-f="${f}">${val ? (f === 'rest' ? fmtRest(val) : f === 'kg' ? fmtKg(val) : val) : '–'}</button><button data-action="cfStep" data-e="${E.id}" data-f="${f}" data-d="${d}">+</button></div></div>`;
+  const fld = (f, label, unit, step, max) => `<div class="cf"><span class="lbl">${label}</span>${numIn('cf', E, E[f], unit, step, max, `data-f="${f}"`)}</div>`;
   return `${E.k === 'free' ? `<label class="field">Exercice réalisé (choisi avec l'enseignant)<input type="text" data-field="exName" data-e="${E.id}" value="${esc(E.nm || '')}" placeholder="ex. : gainage latéral, tirage élastique…"></label>` : ''}
-    <div class="cf-grid">${st('s', 'Séries', E.s, '', 1)}${st('r', 'Répétitions', E.r, '', 1)}${E.m && isPdc(E.m) ? '' : st('kg', 'Charge', E.kg, 'kg', 2.5)}${st('rest', 'Récupération', E.rest, '', 15)}</div>`;
+    <div class="cf-grid">${fld('s', 'Séries', '', 1, 20)}${fld('r', 'Répétitions', '', 1, 100)}${E.m && isPdc(E.m) ? '' : fld('kg', 'Charge', 'kg', 0.5, 400)}${fld('rest', 'Récupération', 's', 5, 600)}</div>`;
 }
 /* Entre deux exercices : 6 min d'endurance (Affinement) ou de cardio (Tonification) */
 function interCard(n, sid, E){
@@ -902,13 +945,14 @@ function pickMachine({ title, hint, ids, n, sid, extra, onPick }){
 const PIL_LBL = ['Jamais','Très rarement','Rarement','Parfois','1 fois sur 2','Assez souvent','Souvent','Très souvent','Presque toujours','Toujours'];
 function updE(eid, fn){
   const n = curLesson(), sid = UI.sid;
+  if (UI.open[eid] == null) UI.open[eid] = true;
   setRes(n, sid, r => { const E = r.ex.find(x => x.id === eid); if (!E) return; fn(E, r); E.ts = now(); });
 }
 function bindEntry(){
   bindDials((d, v) => {
     const i = +d.i; UI.cur = UI.cur || {}; if (!d.p || UI.cur[d.e] == null) UI.cur[d.e] = i;
     updE(d.e, E => {
-      if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; }
+      if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; if (S.curObs) E.by = S.curObs; }
       else { E.sets = E.sets || []; E.sets[i] = v; }
     });
     flagSaved(); rerender();
@@ -1005,6 +1049,9 @@ const A_ELEVE = {
   interPick: d => { updE(d.e, E => { E.it = E.it || {}; E.it.x = E.it.x === d.id ? null : d.id; }); rerender(); flagSaved(); },
   interOk: d => { updE(d.e, E => { E.it = E.it || {}; E.it.ok = !E.it.ok; }); rerender(); flagSaved(); },
   restGo: d => startRest(+d.s, d.l || ''),
+  fq: d => { updE(d.e, E => { E.fq = E.fq || {}; E.fq[d.p] = E.fq[d.p] || []; const v = +d.v; E.fq[d.p][+d.i] = E.fq[d.p][+d.i] === v ? null : v; if (S.curObs) E.by = S.curObs; }); rerender(); flagSaved(); },
+  pickObs: d => { S.curObs = d.sid; save(); rerender(); },
+  changeObs: () => { delete S.curObs; save(); render(); window.scrollTo(0, 0); },
   restStop: () => stopRest(),
   drawRole: () => { const n = curLesson(), used = new Set(Object.values(lesson(n).role));
     S.students.forEach(s => { const c = res(n, s.id)?.coach?.c; if (c) used.add(c); });
@@ -1314,9 +1361,9 @@ function lessonSummary(n, sid){
   const r = res(n, sid), h = S.hist[sid]?.[n];
   if (r) { const pm = pilMeans(n, sid);
     return { th: thOf(n), at: attOf(n, sid), mob: mobOf(n, sid), fo: foOf(n, sid), mo: moOf(n, sid), ex: (r.ex || []).length + (r.hip || []).length,
-      reps: (r.ex || []).reduce((a, E) => a + (E.k === 'max' ? 0 : repsDone(E)), 0), pil: avg(Object.values(pm)), r, wu: r.wu }; }
-  if (h) return { th: h[0], at: h[1] || null, mob: h[2] || null, ex: h[3] || 0, reps: h[4] || 0, pil: h[5] ? h[5] / 10 : null, fo: h[6] || null, mo: h[7] || null };
-  const at = attOf(n, sid); return at ? { th: thOf(n), at } : null;
+      reps: (r.ex || []).reduce((a, E) => a + (E.k === 'max' ? 0 : repsDone(E)), 0), pil: avg(Object.values(pm)), og: avg(obsGiven(n, sid)), r, wu: r.wu }; }
+  if (h) return { th: h[0], at: h[1] || null, mob: h[2] || null, ex: h[3] || 0, reps: h[4] || 0, pil: h[5] ? h[5] / 10 : null, fo: h[6] || null, mo: h[7] || null, og: h[8] ? h[8] / 10 : null };
+  const at = attOf(n, sid), og = avg(obsGiven(n, sid)); return at || og != null ? { th: thOf(n), at, og } : null;
 }
 function maxTable(sid, n){
   const ms = maxedMachines(sid);
@@ -1330,7 +1377,8 @@ function maxTable(sid, n){
 function exLine(n, sid, E){
   if (E.k === 'max') return `🏋️ <b>${esc(mName(E.m))}</b> · prise de max ${E.mode === 'brz' ? `(${fmtKg(E.kg)} × ${E.r}, Brzycki)` : E.mode === '1rm' ? '(1RM)' : '(répétitions)'} : <b>${fmtMax(E.m, E.v)}</b>`;
   const t = target(n, sid, E), nm = E.m ? mName(E.m) : (E.nm || 'Exercice adapté');
-  const pils = Object.keys(E.ob || {}).map(id => { const v = obMean(E, id); return v != null ? `${pilier(id)?.ico || '👀'} ${fmt(v)}` : ''; }).filter(Boolean).join(' ');
+  const pils = Object.keys(E.ob || {}).map(id => { const v = obMean(E, id); if (v == null) return ''; const f = vals(E.fq?.[id]), k = succOf(v, withFreq(E) && f.length ? Math.round(avg(f)) : null);
+    return `<span class="pil-mini" style="background:${SUCC[k].c};color:${SUCC[k].f}" title="${esc(pilier(id)?.n || '')}${f.length ? ' · ' + FREQ[Math.round(avg(f))] : ''}">${pilier(id)?.ico || '👀'} ${fmt(v)}</span>`; }).filter(Boolean).join(' ') + (E.by && E.by !== 'x' && student(E.by) ? ` <span class="muted">(obs. ${esc(nameOf(E.by))})</span>` : '');
   return `${E.k === 'free' ? '✏️' : E.k === 'coach' ? '🎭' : '💪'} <b>${esc(nm)}</b> · ${esc(tgtTxt(t))} · réalisé : ${vals(E.sets).join(' / ') || '—'}${pils ? ' · ' + pils : ''}${E.it?.x ? ` · ⏱️ 6 min ${esc(wuEx(E.it.x)?.n || '')}${E.it.ok ? ' ✓' : ''}` : ''}`;
 }
 const wuTxt = w => !w ? '' : w.t === '3x3' || w.p || w.c || w.e ? ['p','c','e'].map(k => w[k] ? wuEx(w[k])?.n : null).filter(Boolean).join(' · ') : (w.ex || []).map(id => wuEx(id)?.n).filter(Boolean).join(', ');
@@ -1341,9 +1389,9 @@ function viewSuiviDetail(sid){
   for (let n = 1; n <= N; n++) { const x = lessonSummary(n, sid); if (!x) continue; const T = THEMES[x.th] || {};
     rows += `<tr><td><b>L${n}</b></td><td>${T.ico || ''} ${esc(T.n || '')}${x.mob && (THEMES[x.th]?.mobs || []).length > 1 ? `<div class="muted" style="font-size:13px">${esc(MOB[x.mob]?.n || '')}</div>` : ''}</td>
       <td>${x.at ? `<span class="tag ${ATT[x.at].cls}">${esc(ATT[x.at].n)}</span>` : ''}</td><td class="c">${chipV(x.fo)}</td><td class="c">${chipV(x.mo)}</td>
-      <td class="c">${x.ex || '—'}</td><td class="c">${x.reps || '—'}</td><td class="c">${chipV(x.pil)}</td></tr>`;
+      <td class="c">${x.ex || '—'}</td><td class="c">${x.reps || '—'}</td><td class="c">${chipV(x.pil)}</td><td class="c">${chipV(x.og)}</td></tr>`;
     if (x.r && isProfRole() || x.r && UI.view === 'suiviDetail') { const det = (x.r.ex || []).map(E => `<div>${exLine(n, sid, E)}</div>`).join('') + (x.r.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') + (wuTxt(x.wu) ? `<div>🔥 Échauffement : ${esc(wuTxt(x.wu))}</div>` : '');
-      if (det) rows += `<tr class="det"><td></td><td colspan="7">${det}</td></tr>`; } }
+      if (det) rows += `<tr class="det"><td></td><td colspan="8">${det}</td></tr>`; } }
   const notes = evalLessons().map(n => ({ n, v: evalNote(n, sid) })).filter(x => x.v != null);
   const coach = []; for (let n = 1; n <= N; n++) if (thOf(n) === 'coach' && lesson(n).cn[sid]?.v) coach.push({ n, v: lesson(n).cn[sid].v });
   const P = S.projects[sid];
@@ -1351,7 +1399,7 @@ function viewSuiviDetail(sid){
       ${P ? `<div style="margin-top:6px;font-weight:800">📋 Projet : ${esc(MOB[P.mob]?.n || '')} · ${(P.ms || []).map(mName).join(', ')}</div>` : ''}
       ${notes.length || coach.length ? `<div class="row" style="margin-top:8px">${notes.map(x => `<span class="note-chip">${THEMES[thOf(x.n)].ico} L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}${coach.map(x => `<span class="note-chip">🎭 L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}</div>` : ''}</div>
     <div class="card"><h2>🏋️ Mes max</h2>${maxTable(sid)}</div>
-    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">💪 Forme</th><th class="c">🔥 Motiv.</th><th class="c">Exercices</th><th class="c">Rép.</th><th class="c">👀 Piliers</th></tr>${rows || '<tr><td colspan="8">Pas encore de séance.</td></tr>'}</table></div></div>`;
+    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">💪 Forme</th><th class="c">🔥 Motiv.</th><th class="c">Exercices</th><th class="c">Rép.</th><th class="c">👀 Piliers reçus</th><th class="c">📊 Notes données</th></tr>${rows || '<tr><td colspan="9">Pas encore de séance.</td></tr>'}</table></div></div>`;
 }
 
 function profMaxes(){
@@ -1366,12 +1414,13 @@ function profBilanL(){
   const N = S.settings.nbLessons, n = UI.bilN && UI.bilN <= N ? UI.bilN : curLesson(), P = lessonPils(n);
   return `<div class="card strong compact"><h2>🔎 Bilan de la leçon</h2><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(k=>`<button class="lp ${k===n?'on':''}" data-action="bilN" data-n="${k}"><span>${k}</span><small>${THEMES[thOf(k)].ico}</small></button>`).join('')}</div>
       <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(n))}${P.length ? ' · ' + P.map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div></div>
-    <div class="card"><div class="pj-table-wrap"><table class="pj-table"><tr><th>Élève</th><th>Statut</th><th class="c">💪</th><th class="c">🔥</th><th>🔥 Échauffement</th><th>Séance</th>${P.map(p => `<th class="c">${p.ico}</th>`).join('')}</tr>
+    <div class="card"><div class="pj-table-wrap"><table class="pj-table"><tr><th>Élève</th><th>Statut</th><th class="c">💪</th><th class="c">🔥</th><th>🔥 Échauffement</th><th>Séance</th>${P.map(p => `<th class="c">${p.ico}</th>`).join('')}<th class="c" title="Moyenne des notes données en tant qu'observateur">📊 Notes<br>données</th></tr>
     ${sortedStudents().map(s => { const at = attOf(n, s.id), r = res(n, s.id), pm = pilMeans(n, s.id), z = zonesOf(n, s.id);
       return `<tr><td><b>${esc(nameOf(s.id))}</b></td><td>${at ? `<span class="tag ${ATT[at].cls}">${esc(ATT[at].n)}</span>` : ''}${z.length ? `<div class="muted" style="font-size:13px">🩹 ${esc(z.map(zoneName).join(', '))}</div>` : ''}</td>
         <td class="c">${chipV(foOf(n, s.id))}</td><td class="c">${chipV(moOf(n, s.id))}</td><td style="font-size:14px">${esc(wuTxt(r?.wu))}${r?.wu?.ok ? ' ✓' : ''}</td>
         <td style="font-size:14px">${(r?.ex || []).map(E => `<div>${exLine(n, s.id, E)}</div>`).join('') + (r?.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') || (at ? '' : '<span class="muted">rien reçu</span>')}</td>
-        ${P.map(p => `<td class="c">${chipV(pm[p.id])}</td>`).join('')}</tr>`; }).join('')}</table></div></div>`;
+        ${P.map(p => `<td class="c">${chipV(pm[p.id])}</td>`).join('')}<td class="c">${(g => g.length ? chipV(avg(g)) + `<div class="muted" style="font-size:12px">${g.length} note(s)</div>` : '<span class="muted">—</span>')(obsGiven(n, s.id))}</td></tr>`; }).join('')}</table></div>
+      <div class="muted" style="font-weight:700;margin-top:6px">📊 Notes données : moyenne des notes de piliers que l'élève a mises en tant qu'observateur (moyenne de la classe : ${fmt(avg(obsGiven(n, null)))}).</div></div>`;
 }
 function profCoachB(fixed){
   const ls = []; for (let k = 1; k <= S.settings.nbLessons; k++) if (thOf(k) === 'coach') ls.push(k);
@@ -1808,14 +1857,14 @@ function buildSeance(n){
   list.forEach(s => {
     MACHINES.forEach(m => { const h = maxHist(s.id, m.id).filter(x => x.n <= n); if (h.length) (mx[s.id] = mx[s.id] || {})[m.id] = h.slice(-4).map(x => [Math.round(x.v * 10) / 10, x.n, x.mode || '']); });
     for (let k = 1; k < n; k++) { const x = lessonSummary(k, s.id); if (!x) continue;
-      (hist[s.id] = hist[s.id] || {})[k] = [x.th, x.at || 0, x.mob || 0, x.ex || 0, x.reps || 0, x.pil != null ? Math.round(x.pil * 10) : 0, x.fo || 0, x.mo || 0]; }
+      (hist[s.id] = hist[s.id] || {})[k] = [x.th, x.at || 0, x.mob || 0, x.ex || 0, x.reps || 0, x.pil != null ? Math.round(x.pil * 10) : 0, x.fo || 0, x.mo || 0, x.og != null ? Math.round(x.og * 10) : 0]; }
     const P = S.projects[s.id]; if (P) pj[s.id] = { mob:P.mob, ms:P.ms, ts:P.ts || 1 };
   });
   const roles = L.th === 'coach' ? Object.fromEntries(ROOT.roles.map(r => [r.id, { n:r.n, t:r.t }])) : null;
   return { k:'seance', v:1, cid:S.id, cn:className(), pin:ROOT.pin, nbL:S.settings.nbLessons, cur:n, ng:nbGroups(), gc:S.settings.groupColors.slice(0, nbGroups()), off:ROOT.mOff,
     L:{ th:L.th, pil:lessonPils(n), suivi:L.suivi, wu:L.wu, hs:L.hs },
     st: list.map(s => [s.id, nameOf(s.id), grpOf(s.id, n), attOf(n, s.id) || 0, zoneMask(L.z[s.id] || []), nz(L.wb[s.id]?.fo), nz(L.wb[s.id]?.mo), L.role[s.id] || 0]),
-    mx, hist, pj, roles };
+    mx, hist, pj, roles, pr: { ...(S.pairs || {}), ...pairsFromResults() } };
 }
 function targetClass(cid, name, create){
   if (cid && ROOT.classes[cid]) return ROOT.classes[cid];
@@ -1838,7 +1887,7 @@ function applySeance(p){
     if (at) L.att[id] = at; const z = maskZones(zm); if (z.length) L.z[id] = z;
     if (fo || mo) L.wb[id] = { fo: fo || null, mo: mo || null }; if (ro) L.role[id] = ro; });
   S.mx = {}; Object.entries(p.mx || {}).forEach(([sid, ms]) => { S.mx[sid] = {}; Object.entries(ms).forEach(([m, arr]) => { S.mx[sid][m] = arr.map(x => ({ v:x[0], n:x[1], mode:x[2] })); }); });
-  S.hist = p.hist || {};
+  S.hist = p.hist || {}; S.pairs = { ...(S.pairs || {}), ...(p.pr || {}) }; delete S.curObs;
   Object.entries(p.pj || {}).forEach(([sid, P]) => { const loc = S.projects[sid]; if (!(loc && loc.d === S.deviceId && (loc.ts || 0) > (P.ts || 0))) S.projects[sid] = { ...P, d:'prof' }; });
   ROOT.seance = { cid:S.id, n:p.cur, at:now() };
   save(); toast(`✓ Leçon reçue : ${className()} · leçon ${p.cur}`, 3500);
@@ -1981,12 +2030,12 @@ function exportXlsx(){
   /* Séances */
   let maxS = 6; Object.values(S.results).forEach(b => Object.values(b).forEach(r => (r.ex || []).forEach(E => { maxS = Math.max(maxS, (E.sets || []).length); })));
   const se = [['Nom','Prénom','Leçon','Thème','Mobile','Type','Exercice','Groupe musculaire','Séries','Rép. prévues','% du max','Charge proposée','Récup (s)',
-    ...Array.from({length:maxS}, (_, i) => `Série ${i+1}`), 'Total rép.', ...piliers().map(p => p.n), 'Entre exercices']];
+    ...Array.from({length:maxS}, (_, i) => `Série ${i+1}`), 'Total rép.', ...piliers().map(p => p.n), ...piliers().map(p => p.n + ' · fréquence'), 'Observateur', 'Entre exercices']];
   list.forEach(s => { for (let n = 1; n <= N; n++) { const r = res(n, s.id); if (!r) continue;
     (r.ex || []).forEach(E => { const m = machine(E.m), t = E.k === 'max' ? null : target(n, s.id, E);
       se.push([...id2(s), n, themeName(thOf(n)), MOB[E.mob || mobOf(n, s.id)]?.n || '', { th:'Thème', max:'Prise de max', free:'Adapté', coach:'Coach' }[E.k], m ? m.n : E.nm || '', m ? GROUPS[m.g].n : '',
         t?.s ?? '', t?.r ?? (E.k === 'max' ? E.r ?? '' : ''), t?.pct ?? '', E.k === 'max' ? `max ${r1(E.v)}` : t?.zone?.t || '', t?.rest ?? '',
-        ...Array.from({length:maxS}, (_, i) => E.sets?.[i] ?? ''), E.k === 'max' ? '' : repsDone(E), ...piliers().map(p => r1(obMean(E, p.id))), E.it?.x ? (wuEx(E.it.x)?.n || '') + (E.it.ok ? ' ✓' : '') : '']); });
+        ...Array.from({length:maxS}, (_, i) => E.sets?.[i] ?? ''), E.k === 'max' ? '' : repsDone(E), ...piliers().map(p => r1(obMean(E, p.id))), ...piliers().map(p => (f => f.length ? FREQ[Math.round(avg(f))] : '')(vals(E.fq?.[p.id]))), E.by ? (E.by === 'x' ? 'Enseignant' : nameOf(E.by)) : '', E.it?.x ? (wuEx(E.it.x)?.n || '') + (E.it.ok ? ' ✓' : '') : '']); });
     (r.hip || []).forEach(x => se.push([...id2(s), n, 'Hippopogramme', '', 'Hippopogramme', mName(x.m), GROUPS[machine(x.m)?.g]?.n || '', 1, x.r, '', x.kg, '', x.r])); } });
   add(se, 'Séances');
   /* Appel et échauffements */
@@ -2030,6 +2079,7 @@ function makeDemo(){
     L.suivi = i % 2 ? 's' : 'e'; L.wu = i % 3 === 2 ? { t:'3x3' } : { t:'circuit', nb:6, dur:30 }; });
   const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1)), pick = a => a[Math.floor(Math.random() * a.length)];
   const base = { dc:[25,55], chest_press:[30,70], tirage_vertical:[30,60], presse:[80,180], legcurl:[25,60], shoulder:[15,40], biceps_curl:[10,30], pompes:[8,35], tractions:[1,12], rowing:[25,55], ischios:[20,45], abdos:[20,60] };
+  const obsOf = si => S.students[si % 2 ? si - 1 : Math.min(si + 1, S.students.length - 1)].id;   // binômes 1-2, 3-4…
   S.students.forEach((s, si) => {
     const L1 = lesson(1); if (si === 5) L1.att[s.id] = 'abs';
     for (let n = 1; n <= 3; n++) { const L = lesson(n);
@@ -2044,9 +2094,9 @@ function makeDemo(){
       r.ex.forEach(E => { if (E.k === 'max') E.v = maxFromEntry(E); });
       S.results[n][s.id] = r;
       if (n === 2) { r.mob = 'vol'; const g1 = pick([['dc','chest_press'],['tirage_vertical','rowing']]), g2 = pick([['presse','legcurl'],['shoulder','biceps_curl']]);
-        [...g1, ...g2].forEach(mid => { if (blockOf(2, s.id, mid)) return; r.ex.push({ id:rnd(5), k:'th', m:mid, mob:'vol', sets:[10,10,R(8,10),R(6,10)], ob:{ plac:[R(4,10),R(4,10),R(4,10),R(4,10)], ampl:[R(3,9),R(3,9),R(3,9),R(3,9)] } }); }); }
+        [...g1, ...g2].forEach(mid => { if (blockOf(2, s.id, mid)) return; r.ex.push({ id:rnd(5), k:'th', m:mid, mob:'vol', by: obsOf(si), sets:[10,10,R(8,10),R(6,10)], ob:{ plac:[R(4,10),R(4,10),R(4,10),R(4,10)], ampl:[R(3,9),R(3,9),R(3,9),R(3,9)] }, fq:{ plac:[R(2,5),R(2,5),R(2,5),R(2,5)], ampl:[R(1,5),R(1,5),R(1,5),R(1,5)] } }); }); }
       if (n === 3) { r.mob = pick(['p66','p64']); ['dc','presse','tirage_vertical'].forEach(mid => { if (blockOf(3, s.id, mid)) return; const M = MOB[r.mob];
-        r.ex.push({ id:rnd(5), k:'th', m:mid, mob:r.mob, sets:Array.from({length:M.s}, () => R(M.r - 2, M.r)), ob:{ comp:[R(3,10)] } }); }); }
+        r.ex.push({ id:rnd(5), k:'th', m:mid, mob:r.mob, by: obsOf(si), sets:Array.from({length:M.s}, () => R(M.r - 2, M.r)), ob:{ comp:[R(3,10)] }, fq:{ comp:[R(1,5)] } }); }); }
     }
   });
   lesson(4).hs = ['butterfly'];
@@ -2073,7 +2123,7 @@ const A = {
   switchRole: () => pinPad(() => { ROOT.role = 'prof'; UI.profUnlocked = true; UI.profTab = 'menu'; save(); go('prof'); }, '🔒 Code enseignant · passer en tablette enseignant'),
   goSaisie: () => { UI.filter = null; go('saisie'); },
   pickGroup: d => { UI.filter = d.g === 'all' ? 'all' : d.g ? +d.g : null; go('saisie'); },
-  entry: d => { if (d.sid) { UI.open = {}; UI.cur = {}; stopRest(); go('entry', { sid: d.sid }); } },
+  entry: d => { if (d.sid) { if (S.curObs && S.curObs !== 'x' && S.curObs !== d.sid) { S.pairs = S.pairs || {}; S.pairs[S.curObs] = d.sid; save(); } UI.open = {}; UI.cur = {}; stopRest(); go('entry', { sid: d.sid }); } },
   suiviDetail: d => go('suiviDetail', { sid: d.sid }),
   selClass: d => { useClass(d.id); UI.filter = null; save(); render(); },
   addClass: () => { const name = ($('#new-class').value || '').trim(); if (!name) return toast('Nom de la classe ?');
@@ -2168,6 +2218,13 @@ document.addEventListener('change', e => {
   if (f === 'evV') { const L = lesson(d.n); L.ev[d.sid] = L.ev[d.sid] || {}; L.ev[d.sid][d.p] = +t.value; save(); rerender(); }
   if (f === 'coachNote') { const L = lesson(d.n); L.cn[d.sid] = { ...(L.cn[d.sid] || {}), v:+t.value }; save(); rerender(); }
   if (f === 'coachCom') { const L = lesson(d.n); L.cn[d.sid] = { ...(L.cn[d.sid] || {}), com:t.value.trim() }; save(); }
+  if (f === 'maxKg' || f === 'maxR') { const v = t.value === '' ? null : parseFloat(String(t.value).replace(',', '.'));
+    updE(d.e, E => { if (f === 'maxKg') E.kg = v == null || isNaN(v) ? null : Math.max(0, Math.min(400, r05(v)));
+      else E.r = v == null || isNaN(v) ? null : Math.max(1, Math.min(E.mode === 'brz' ? BRZ_MAX_R : 150, Math.round(v))); E.v = maxFromEntry(E); });
+    if (f === 'maxR' && d && t.value && +t.value > BRZ_MAX_R && findE(curLesson(), UI.sid, d.e)?.mode === 'brz') toast(`Brzycki : ${BRZ_MAX_R} répétitions maximum`);
+    flagSaved(); rerender(); return; }
+  if (f === 'cf') { const v = t.value === '' ? null : parseFloat(String(t.value).replace(',', '.'));
+    updE(d.e, E => { E[d.f] = v == null || isNaN(v) ? null : d.f === 'kg' ? r05(v) : Math.round(v); }); flagSaved(); rerender(); return; }
   if (f === 'exName') { updE(d.e, E => { E.nm = t.value.trim(); }); flagSaved(); }
   if (f === 'coach') { setRes(curLesson(), UI.sid, r => { r.coach = r.coach || {}; r.coach[d.f] = t.value.trim(); }); flagSaved(); }
 });
