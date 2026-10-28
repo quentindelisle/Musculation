@@ -897,3 +897,7 @@ input[type=range].unset{opacity:.45}
 .ev-list{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
 @media (max-width:640px){ .ev-list{grid-template-columns:1fr} }
 @media (max-width:640px){ .sc10-r{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px} .sc10{flex-direction:column;align-items:stretch} }
+/* v1.0.1 — icône N'EPS Musculation (carrée, fond blanc) */
+.home-logo{border-radius:28px;width:min(280px,58vw)}
+.tb-home{border-radius:12px;overflow:hidden}
+.tb-home img{border-radius:10px}

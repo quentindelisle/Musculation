@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
