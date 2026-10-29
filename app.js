@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -110,7 +110,7 @@ const DEFAULT_PILIERS = [
   { id:'ampl', n:'Maintenir une amplitude continue', ico:'↕️', cr:['Amplitude complète à chaque répétition', 'Pas d\'arrêt ni de rebond aux extrémités du mouvement', 'Rythme réalisé en fonction du mobile (retour contrôlé)'] },
   { id:'comp', n:'Éviter les compensations', ico:'🎯', cr:['Pas d\'élan ni d\'à-coups', 'Le dos reste plaqué, pas de cambrure', 'Seuls les segments travaillés bougent'] },
   { id:'fati', n:'Repérer les signes de fatigue', ico:'🔋', cr:['Expiration sur les temps moteurs, pas d\'apnée', 'Perte de vitesse ou d\'amplitude repérée et annoncée', 'Charge allégée ou série arrêtée si la technique se dégrade'] },
-  { id:'enco', n:'Encourager pour favoriser l\'engagement', ico:'📣', cr:['Compte les répétitions à voix haute', 'Encourage pendant les dernières répétitions', 'Donne un retour positif et un conseil après la série'] },
+  { id:'enco', n:'Encourager pour favoriser l\'engagement', ico:'📣', cr:['Compte les répétitions à voix haute', 'Encourage pendant les dernières répétitions', 'Donne un retour positif et un conseil après la série'], prof:true },
   { id:'secu', n:'Sécurité', ico:'🛡️', cr:['Charge et goupille vérifiées avant la série', 'Charge accompagnée jusqu\'au retour, jamais lâchée', 'Zone de travail dégagée, matériel rangé après usage'], secu:true },
 ];
 const PIL_V = 1;
@@ -182,6 +182,7 @@ function loadRoot(){
   if (!ROOT.deviceId) ROOT.deviceId = rnd(4);
   if (!ROOT.pin) ROOT.pin = '0000';
   if (!ROOT.piliers || (ROOT.pilV || 0) < PIL_V) { ROOT.piliers = DEFAULT_PILIERS.map(p => ({ ...p, cr:[...p.cr] })); ROOT.pilV = PIL_V; }
+  { const e = ROOT.piliers.find(p => p.id === 'enco'); if (e) e.prof = true; }
   if (!ROOT.roles) ROOT.roles = DEFAULT_ROLES.map(r => ({ ...r }));
   if (!ROOT.mOff) ROOT.mOff = [];
   Object.values(ROOT.classes).forEach(normClass);
@@ -337,6 +338,7 @@ function lesson(n){
   const L = S.lessons[n];
   if (!L.th) L.th = n === 1 ? 'max' : 'vol';
   if (!Array.isArray(L.pil)) L.pil = [];
+  if (L.pil.some(id => pilier(id)?.prof)) L.pil = L.pil.filter(id => !pilier(id)?.prof);
   if (!L.suivi) L.suivi = 's';
   if (!L.wu) L.wu = { t:'circuit', nb:6, dur:30 };
   ['att','z','wb','role','ev','evp','cn','crit','grpOv'].forEach(k => { if (!L[k] || typeof L[k] !== 'object') L[k] = {}; });
@@ -385,10 +387,17 @@ function wuBlocked(n, sid, id){ const x = wuEx(id); const z = zonesOf(n, sid); i
 function lessonPils(n){
   const L = lesson(n);
   if (Array.isArray(L.pilS) && !isProfRole()) return L.pilS;
-  return L.pil.map(id => { const p = pilier(id); if (!p) return null;
+  return L.pil.map(id => { const p = pilier(id); if (!p || p.prof) return null;
     const keep = L.crit[id]; const cr = Array.isArray(keep) && keep.length ? p.cr.filter((_, i) => keep.includes(i)) : p.cr.filter(Boolean);
     return { id:p.id, n:p.n, ico:p.ico, cr }; }).filter(Boolean);
 }
+/* Échelle de Borg (ressenti de l'effort, 1 à 10) */
+const BORG = [{ n:'aucun effort', c:'#DCE6F2', f:'#0A1633' }, { n:'très très facile', c:'#8EA9C9', f:'#0A1633' }, { n:'très facile', c:'#9BCB6B', f:'#0A1633' }, { n:'facile', c:'#7DBB4F', f:'#0A1633' },
+  { n:'effort modéré', c:'#D6E05A', f:'#0A1633' }, { n:'moyen', c:'#FFE14D', f:'#0A1633' }, { n:'un peu dur', c:'#F6C04E', f:'#0A1633' }, { n:'dur', c:'#F29B3A', f:'#0A1633' },
+  { n:'très dur', c:'#EC6A35', f:'#fff' }, { n:'très très dur', c:'#E0393A', f:'#fff' }, { n:'maximal', c:'#B71C1C', f:'#fff' }];
+const borgOf = E => vals(E.bg);
+function borgMean(n, sid){ const r = res(n, sid); if (!r) return null; return avg((r.ex || []).flatMap(borgOf)); }
+const chipB = v => v == null ? '<span class="muted">—</span>' : (k => `<span class="wv" style="background:${BORG[k].c};color:${BORG[k].f}" title="${BORG[k].n}">${fmt(v)}</span>`)(Math.max(1, Math.min(10, Math.round(v))));
 const maxPils = n => thOf(n) === 'evf' ? 6 : 2;
 
 /* ---------------------------------------------------------------------
@@ -495,7 +504,7 @@ const scaleText = v => v >= 5 && v <= 7 ? '#0A1633' : '#fff';
 const chipV = v => v == null ? '<span class="muted">—</span>' : `<span class="wv" style="background:${scaleColor(v)};color:${scaleText(v)}">${fmt(v)}</span>`;
 /* note d'évaluation (prof) : moyenne des piliers notés de 1 à 10 → note /10 */
 function evalNote(n, sid){ const e = lesson(n).ev[sid]; if (!e) return null; const ids = evalPils(n, sid); const v = vals(ids.map(id => e[id])); return v.length && v.length === ids.length ? Math.round(avg(v) * 10) / 10 : null; }
-function evalPils(n, sid){ const L = lesson(n); if (thOf(n) === 'evi') return (L.evp[sid] && L.evp[sid].length ? L.evp[sid] : L.pil).slice(0, 3); return L.pil; }
+function evalPils(n, sid){ const L = lesson(n); if (thOf(n) === 'evi') return (L.evp[sid] && L.evp[sid].length ? L.evp[sid] : L.pil).slice(0, 3); return [...L.pil, ...piliers().filter(p => p.prof && !L.pil.includes(p.id)).map(p => p.id)]; }
 /* ---------------------------------------------------------------------
    Roue crantée (molette circulaire graduée) : répétitions validées et piliers (1 → 10)
    --------------------------------------------------------------------- */
@@ -506,10 +515,11 @@ function arc(r, a0, a1){ const [x0,y0]=pol(r,a0),[x1,y1]=pol(r,a1); return `M${x
 function dialColor(cfg, v){
   if (v == null) return '#9AA3B5';
   if (cfg.kind === 'pil') return scaleColor(v);
+  if (cfg.kind === 'borg') return BORG[v]?.c || '#9AA3B5';
   if (cfg.t) { const q = v / cfg.t; return q >= 1 ? '#1E8E3E' : q >= .8 ? '#86DC96' : q >= .6 ? '#FFD000' : q >= .4 ? '#F07000' : '#D0161B'; }
   return '#0062C4';
 }
-const dialFg = (cfg, v) => { const c = dialColor(cfg, v); return ['#86DC96','#FFD000','#C8D93A','#F59E0B'].includes(c) || (cfg.kind === 'pil' && v >= 5 && v <= 7) ? '#0A1633' : '#fff'; };
+const dialFg = (cfg, v) => { if (cfg.kind === 'borg') return v == null ? '#fff' : BORG[v].f; const c = dialColor(cfg, v); return ['#86DC96','#FFD000','#C8D93A','#F59E0B'].includes(c) || (cfg.kind === 'pil' && v >= 5 && v <= 7) ? '#0A1633' : '#fff'; };
 function dialInner(cfg){
   const { v, min, max } = cfg, span = max - min, step = DIAL_SPAN / span, col = dialColor(cfg, v);
   const nb = span + 1, [rr, ro, fs] = nb <= 11 ? [14, 18, 16] : nb <= 16 ? [11, 15, 13] : nb <= 21 ? [9, 13, 11] : [7.5, 12, 9.5];
@@ -697,7 +707,7 @@ function saisieTile(n, s, sug){
     <span class="name">${esc(nameOf(s.id))}</span>
     ${M ? `<span class="target">${M.ico} ${esc(M.n)}</span>` : ''}
     ${z.length || attOf(n, s.id) === 'inap' ? `<span class="tag inapte">🩹 ${esc(z.map(zoneName).join(', ') || 'Inaptitude')}</span>` : ''}
-    <span class="meta">🏋️ ${st.done} exercice(s) fait(s)${st.plan ? ' / ' + st.plan : ''}${foOf(n, s.id) ? ` · 💪 ${foOf(n, s.id)}/10` : ''}</span></button>`;
+    <span class="meta">🏋️ ${st.done} exercice(s) fait(s)${st.plan ? ' / ' + st.plan : ''}</span></button>`;
 }
 
 /* ---------------------------------------------------------------------
@@ -733,16 +743,12 @@ function viewEntry(){
   return h;
 }
 function flagSaved(){ const f=$('#saved-flag'); if (f){ f.textContent='✓ Enregistré'; clearTimeout(f._h); f._h=setTimeout(()=>f.textContent='',1500);} }
-/* Début de cours : forme, motivation, inaptitude */
+/* Début de cours : inaptitude éventuelle */
 function startBlock(n, sid, r){
-  const L = lesson(n), fo = foOf(n, sid), mo = moOf(n, sid), z = zonesOf(n, sid), at = attOf(n, sid);
-  const open = UI.open['start'] ?? !(fo && mo);
-  return `<section class="well-sec ${open ? '' : 'folded'}"><h2 data-action="fold" data-k="start">🌅 Début de cours ${open ? '' : `<span class="fold-sum">💪 Forme ${fo ?? '—'}/10 · 🔥 Motivation ${mo ?? '—'}/10${z.length ? ' · 🩹 ' + esc(z.map(zoneName).join(', ')) : ''}</span>`}<span class="fold-ico">${open ? '▲' : '▼'}</span></h2>
-    ${open ? `${scale10('Mon état de forme', '💪', fo, `data-action="well" data-f="fo"`, 'forme')}
-      ${scale10('Ma motivation', '🔥', mo, `data-action="well" data-f="mo"`, 'motiv')}
-      <div class="row" style="margin-top:10px">${at === 'inap' || z.length ? `<span class="tag inapte" style="font-size:16px">🩹 Inaptitude : ${esc(z.map(zoneName).join(', ') || 'partielle')}</span>` : ''}
-        <button class="btn small ${r.z?.length ? 'red' : ''}" data-action="inapOpen">🩹 ${r.z?.length ? 'Modifier mon inaptitude' : 'Je déclare une inaptitude'}</button></div>
-      ${z.length ? '<div class="muted" style="font-weight:700;font-size:15px">Les machines qui sollicitent ces zones sont retirées. Tu peux ajouter un ✏️ exercice adapté, choisi avec ton enseignant.</div>' : ''}` : ''}</section>`;
+  const z = zonesOf(n, sid), at = attOf(n, sid);
+  return `<div class="row inap-row">${at === 'inap' || z.length ? `<span class="tag inapte" style="font-size:16px">🩹 Inaptitude : ${esc(z.map(zoneName).join(', ') || 'partielle')}</span>` : ''}
+      <button class="btn small ${r.z?.length ? 'red' : ''}" data-action="inapOpen">🩹 ${r.z?.length ? 'Modifier mon inaptitude' : 'Je déclare une inaptitude'}</button>
+      ${z.length ? '<span class="muted" style="font-weight:700;font-size:15px">Machines adaptées · tu peux ajouter un ✏️ exercice adapté, choisi avec ton enseignant.</span>' : ''}</div>`;
 }
 /* Échauffement : Circuit Training ou 3 × 3 minutes */
 function wuBlock(n, sid, r){
@@ -794,7 +800,7 @@ function addBar(n, sid, r){
   if (th === 'coach') b += `<button class="btn primary big-add" data-action="addEx" data-k="coach">➕ Exercice de mon programme</button>`;
   else if (mob) b += `<button class="btn primary big-add" data-action="addEx" data-k="th" ${rule.full ? 'disabled' : ''}>➕ Exercice du thème${rule.hint ? `<small>${esc(rule.hint)}</small>` : ''}</button>`;
   else if (T_needsMob(th)) b += `<div class="advice warn">Choisis d'abord ${th === 'pui' ? 'ta formule' : 'ton mobile'} ci-dessus.</div>`;
-  if (th !== 'hippo') b += `<button class="btn ${isMaxTheme(th) ? 'primary big-add' : 'orange'}" data-action="addEx" data-k="max">🏋️ Prise de Max</button>`;
+  if (th !== 'hippo') b += `<button class="btn ${isMaxTheme(th) ? 'primary big-add' : 'orange'}" data-action="addEx" data-k="max">🏋️ Besoin de prendre un Max</button>`;
   if (inap) b += `<button class="btn" data-action="addEx" data-k="free">✏️ Exercice adapté (inaptitude)</button>`;
   return `<div class="add-bar">${b}</div>`;
 }
@@ -837,7 +843,7 @@ function maxBody(n, sid, E){
   if (E.mode === 'brz') h += `<div class="muted brz-note">1RM = charge ÷ (1,0278 − 0,0278 × répétitions)${E.kg && E.r ? ` = ${fmt(E.kg)} ÷ (1,0278 − 0,0278 × ${E.r})` : ''}. Plus il y a de répétitions, moins l'estimation est fiable : au-delà de 15, elle ne l'est plus.</div>`;
   if (v && !pdc) h += `<div class="pct-row">${[50,60,70,75,80,90].map(p => `<span><small>${p} %</small>${kgZone(v * p / 100)?.t.replace('entre ', '') || '—'}</span>`).join('')}</div>`;
   if (v && pdc) h += `<div class="pct-row">${[50,60,70,75,80,90].map(p => `<span><small>${p} %</small>${Math.max(1, Math.round(v * p / 100))} rép.</span>`).join('')}</div>`;
-  h += `</div>` + pilDials(n, E, 0, 'Fin de la prise de max');
+  h += `</div>` + (v ? pilDials(n, E, 0, 'Fin de la prise de max') + nextBtn(n, sid, E) : '');
   return h;
 }
 /* boîte de saisie au clavier (charge, répétitions…) */
@@ -862,21 +868,24 @@ function succOf(v, fq){
 const succChip = k => k ? `<span class="succ" style="background:${SUCC[k].c};color:${SUCC[k].f}">${SUCC[k].n}</span>` : '';
 const withFreq = E => !(E.k === 'max' && E.mode === '1rm');
 function pilDials(n, E, i, title){
-  const P = lessonPils(n); if (!P.length) return '';
-  const wf = withFreq(E);
+  const P = lessonPils(n), wf = withFreq(E);
+  const bg = E.bg?.[i] ?? null;
   return `<div class="pil-dials"><div class="pd-h">👀 ${esc(title)}</div>${P.map(p => { const v = E.ob?.[p.id]?.[i] ?? null, fq = E.fq?.[p.id]?.[i] ?? null, cl = critLv(v);
     return `<div class="pil-row"><div class="dial-card pil"><h3>${p.ico} ${esc(p.n)}</h3>${dialHTML({ v, min:0, max:10, kind:'pil', lbl: bandLbl(v) }, `data-e="${E.id}" data-i="${i}" data-p="${p.id}"`)}</div>
       <div class="pil-scale"><ul class="pil-cr">${p.cr.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
         <div class="bands">${BANDS.map(([k, t, r]) => `<div class="band-l ${cl === k ? 'on' : ''}"><b>${r}</b> ${t}</div>`).join('')}</div>
         ${wf ? `<div class="fq-h">Fréquence${v != null ? '' : ' (après la note)'}</div><div class="fq-row">${FREQ.map((f, k) => `<button class="fq ${fq === k ? 'on' : ''}" data-action="fq" data-e="${E.id}" data-i="${i}" data-p="${p.id}" data-v="${k}">${f}</button>`).join('')}</div>` : ''}
-        <div class="succ-row">${succChip(wf ? (fq == null ? null : succOf(v, fq)) : succOf(v, null))}</div></div></div>`; }).join('')}</div>`;
+        <div class="succ-row">${succChip(wf ? (fq == null ? null : succOf(v, fq)) : succOf(v, null))}</div></div></div>`; }).join('')}
+    <div class="pil-row"><div class="dial-card borg"><h3>🥵 Ressenti de l'élève</h3>${dialHTML({ v: bg, min:1, max:10, kind:'borg', lbl: bg ? BORG[bg].n : 'échelle de Borg' }, `data-e="${E.id}" data-i="${i}"`)}</div>
+      <div class="pil-scale borg-scale"><div class="fq-h">Échelle de Borg · on demande à l'élève : « C'était comment ? »</div>
+        <div class="borg-list">${BORG.slice(1).map((b, k) => `<div class="borg-l ${bg === k + 1 ? 'on' : ''}" style="--bc:${b.c};--bf:${b.f}"><b>${k + 1}</b> ${esc(b.n)}</div>`).join('')}</div></div></div></div>`;
 }
 /* Séries : suivi série par série (molette répétitions + piliers) ou en fin d'exercice */
 function setsBody(n, sid, E, t){
   const L = lesson(n), nbS = t?.s || 0, r = t?.r || 10;
   let h = '';
   if (E.k === 'free' || E.k === 'coach') h += customFields(n, sid, E, t);
-  if (t?.noMax && !t.pdc) h += `<div class="advice warn">⚠️ Pas encore de max sur ${esc(mName(E.m))} : fais une <b>🏋️ Prise de Max</b> pour calculer ta charge${E.k === 'coach' ? ', ou écris la charge toi-même' : ''}.</div>`;
+  if (t?.noMax && !t.pdc) h += `<div class="advice warn">⚠️ Pas encore de max sur ${esc(mName(E.m))} : touche <b>🏋️ Besoin de prendre un Max</b> pour calculer ta charge${E.k === 'coach' ? ', ou écris la charge toi-même' : ''}.</div>`;
   if (t?.zone) h += `<div class="load-box"><span>🏋️ Charge</span><b>${esc(t.zone.t)}</b><small>${t.pct} % de ${fmtKg(t.mx)}${t.kg ? ' = ' + fmtKg(t.kg) : ''}</small></div>`;
   if (t?.pdc && t.mx) h += `<div class="load-box"><span>🤸 Poids de corps</span><b>${t.r} rép. par série</b><small>${t.pct} % de ton max de ${t.mx} rép.</small></div>`;
   if (!nbS) return h + `<div class="muted">Indique le nombre de séries.</div>`;
@@ -887,7 +896,8 @@ function setsBody(n, sid, E, t){
         <div class="kg-step sm"><button data-action="setStep" data-e="${E.id}" data-i="${i}" data-d="-1">−</button><span class="kg-val">${v ?? '–'}</span><button data-action="setStep" data-e="${E.id}" data-i="${i}" data-d="1">+</button></div>
         <span class="muted">/ ${r}</span></div>`).join('')}</div>
       <div class="btn-row"><button class="btn green" data-action="setAll" data-e="${E.id}">✓ Toutes les séries réussies (${nbS} × ${r})</button>${t.rest ? `<button class="btn" data-action="restGo" data-s="${t.rest}" data-k="${E.id}" data-l="${esc(E.m ? mName(E.m) : E.nm || '')}">⏳ Récup ${fmtRest(t.rest)}</button>` : ''}</div>`;
-    h += pilDials(n, E, 0, 'Fin d\'exercice · niveau d\'atteinte');
+    if (sets.some(v => v == null)) h += `<div class="muted" style="font-weight:700;margin-top:8px">👀 Le niveau d'atteinte des piliers et l'échelle de Borg s'afficheront quand toutes les séries seront saisies.</div>`;
+    else h += pilDials(n, E, 0, 'Exercice terminé · niveau d\'atteinte et ressenti') + nextBtn(n, sid, E);
     return h;
   }
   /* série par série */
@@ -900,8 +910,12 @@ function setsBody(n, sid, E, t){
       ${dialHTML({ v: sets[cur], min:0, max:maxR, t:r, kind:'reps', lbl:'répétitions' }, `data-e="${E.id}" data-i="${cur}"`)}
       <button class="btn small green" data-action="setOk" data-e="${E.id}" data-i="${cur}">✓ ${r} réussies</button></div></div>
     ${pilDials(n, E, cur, `Série ${cur + 1} · niveau d'atteinte des piliers`)}`;
-  h += `<div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn primary" data-action="setNext" data-e="${E.id}" data-i="${cur}" ${sets[cur] == null ? 'disabled' : ''}>${cur + 1 < nbS ? `Valider la série ${cur + 1} et lancer la récup (${fmtRest(t.rest)}) →` : '✓ Valider la dernière série'}</button></div>`;
+  h += `<div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn primary" data-action="setNext" data-e="${E.id}" data-i="${cur}" ${sets[cur] == null ? 'disabled' : ''}>${cur + 1 < nbS ? `Valider la série ${cur + 1} et lancer la récup (${fmtRest(t.rest)}) →` : '✓ Terminer l\'exercice et passer au suivant'}</button></div>`;
   return h;
+}
+/* Bouton de fin d'exercice : replie l'exercice et propose le suivant */
+function nextBtn(n, sid, E){
+  return `<div class="btn-row" style="justify-content:center;margin-top:10px"><button class="btn primary big-next" data-action="exNext" data-e="${E.id}">✓ Terminer l'exercice et passer au suivant →</button></div>`;
 }
 /* Exercice adapté (inaptitude) ou exercice du programme (Coach d'un jour) : paramètres modifiables */
 function customFields(n, sid, E, t){
@@ -962,7 +976,8 @@ function bindEntry(){
   bindDials((d, v) => {
     const i = +d.i; UI.cur = UI.cur || {}; if (!d.p || UI.cur[d.e] == null) UI.cur[d.e] = i;
     updE(d.e, E => {
-      if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; if (S.curObs) E.by = S.curObs; }
+      if (d.kind === 'borg') { E.bg = E.bg || []; E.bg[i] = v; if (S.curObs) E.by = S.curObs; }
+      else if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; if (S.curObs) E.by = S.curObs; }
       else { E.sets = E.sets || []; E.sets[i] = v; }
     });
     flagSaved(); rerender();
@@ -1046,8 +1061,17 @@ const A_ELEVE = {
     UI.cur = UI.cur || {}; const nxt = Array.from({length:t.s}, (_, k) => k).find(k => k > i && E.sets?.[k] == null);
     UI.cur[d.e] = nxt ?? i;
     if (nxt != null) startRest(t.rest, `${nameOf(UI.sid)} · ${E.m ? mName(E.m) : E.nm} · série ${nxt + 1}`, UI.sid + E.id);
-    else { UI.open[d.e] = false; toast('✓ Exercice terminé : ' + repsDone(E) + ' répétitions'); }
+    else return A_ELEVE.exNext(d);
     rerender(); },
+  exNext: d => { const n = curLesson(), sid = UI.sid, r = res(n, sid) || { ex:[] }, E = findE(n, sid, d.e);
+    UI.open[d.e] = false; if (E && E.k !== 'max') toast('✓ Exercice terminé : ' + repsDone(E) + ' répétitions');
+    const nx = r.ex.find(x => x.id !== d.e && !exDone(n, sid, x));
+    if (nx) { UI.open[nx.id] = true; rerender(); setTimeout(() => document.getElementById('ex-' + nx.id)?.scrollIntoView({ behavior:'smooth', block:'start' }), 50); return; }
+    rerender();
+    const mob = mobOf(n, sid), th = thOf(n);
+    if (th === 'coach') return;
+    if (mob && !slotRule(n, sid, r.ex).full) return addExercise('th');
+    toast('🎉 Séance terminée !', 3000); },
   setStep: d => { const n = curLesson(), E0 = findE(n, UI.sid, d.e), t = target(n, UI.sid, E0);
     updE(d.e, E => { E.sets = E.sets || []; const v = E.sets[+d.i]; E.sets[+d.i] = v == null ? t.r : Math.max(0, Math.min(99, v + (+d.d))); }); rerender(); flagSaved(); },
   setAll: d => { const n = curLesson(), E0 = findE(n, UI.sid, d.e), t = target(n, UI.sid, E0);
@@ -1222,7 +1246,7 @@ function profMenu(){
   return `<div class="card strong compact center"><b style="font-size:20px">🏫 ${esc(className())}</b> · ${esc(lessonLabel(n))} · ${pres}/${S.students.length} présent(s) · ${got} fiche(s) reçue(s)</div>
     <div class="pmenu steps">
       <button class="pm-btn" data-action="profTab" data-tab="cycle"><span class="step">1</span><span class="ico">🛠</span>Préparer le cycle<small>Élèves · groupes · leçons, thèmes et piliers · machines · rôles</small></button>
-      <button class="pm-btn" data-action="profTab" data-tab="appel"><span class="step">2</span><span class="ico">📅</span>Leçon du jour<small>Appel · forme et motivation · inaptitudes · machines HS · 📲 QR</small></button>
+      <button class="pm-btn" data-action="profTab" data-tab="appel"><span class="step">2</span><span class="ico">📅</span>Leçon du jour<small>Appel · inaptitudes · machines HS · 📲 QR</small></button>
       <button class="pm-btn" data-action="profTab" data-tab="recup"><span class="step">3</span><span class="ico">📥</span>Récupérer les saisies<small>Tablettes élèves · Hippopogramme</small></button>
       <button class="pm-btn" data-action="profTab" data-tab="suiviP"><span class="step">4</span><span class="ico">📊</span>Suivi et bilans<small>Fiches élèves · max · évaluations · coach d'un jour · export</small></button>
     </div>
@@ -1238,7 +1262,7 @@ function profCycle(){
   let rows = '';
   for (let n = 1; n <= N; n++) {
     const L = lesson(n), th = L.th, T = THEMES[th], mp = maxPils(n);
-    const pilChips = piliers().filter(p => !p.secu || th === 'evf' || L.pil.includes(p.id)).map(p => `<button class="pchip ${L.pil.includes(p.id) ? 'on' : ''}" data-action="pilToggle" data-n="${n}" data-p="${p.id}">${p.ico} ${esc(p.n)}</button>`).join('');
+    const pilChips = piliers().filter(p => !p.prof && (!p.secu || th === 'evf' || L.pil.includes(p.id))).map(p => `<button class="pchip ${L.pil.includes(p.id) ? 'on' : ''}" data-action="pilToggle" data-n="${n}" data-p="${p.id}">${p.ico} ${esc(p.n)}</button>`).join('');
     const crit = th === 'evf' && L.pil.length ? `<div class="crit-box"><b>Critères retenus pour l'évaluation finale</b>${L.pil.map(id => { const p = pilier(id); if (!p) return ''; const keep = L.crit[id];
       return `<div class="crit-row"><span>${p.ico} ${esc(p.n)}</span>${p.cr.map((c, i) => `<button class="cchip ${!keep || !keep.length || keep.includes(i) ? 'on' : ''}" data-action="critToggle" data-n="${n}" data-p="${id}" data-i="${i}">${esc(c)}</button>`).join('')}</div>`; }).join('')}</div>` : '';
     const W = L.wu;
@@ -1259,7 +1283,7 @@ function profCycle(){
 }
 function profPiliers(){
   return `<div class="card strong"><h2>🏛 Piliers et observables</h2><div class="muted" style="font-weight:700">3 observables par pilier, affichés à l'observateur sur la tablette. Le pilier 🛡️ Sécurité est proposé pour l'évaluation finale.</div></div>
-    ${piliers().map(p => `<div class="card compact"><div class="row"><span style="font-size:28px">${p.ico}</span><input type="text" class="grow" data-field="pilName" data-p="${p.id}" value="${esc(p.n)}"></div>
+    ${piliers().map(p => `<div class="card compact"><div class="row"><span style="font-size:28px">${p.ico}</span>${p.prof ? '<span class="tag mod">📝 évaluation enseignant uniquement</span>' : ''}<input type="text" class="grow" data-field="pilName" data-p="${p.id}" value="${esc(p.n)}"></div>
       <div class="th-cr">${[0,1,2].map(i => `<input type="text" data-field="pilCr" data-p="${p.id}" data-i="${i}" value="${esc(p.cr[i] || '')}" placeholder="Observable ${i+1}">`).join('')}</div></div>`).join('')}
     <div class="btn-row"><button class="btn small ghost" data-action="pilReset">↺ Revenir aux observables proposés</button></div>`;
 }
@@ -1281,24 +1305,21 @@ function profRoles(){
 function profAppel(){
   const n = curLesson(), L = lesson(n), cnt = k => S.students.filter(s => attOf(n, s.id) === k).length;
   return `<div class="card strong"><h2>✅ Appel · Leçon ${n}</h2><div class="muted" style="font-weight:700">${S.students.length - cnt('abs') - cnt('disp')} présent(s) · ${cnt('abs')} absent(s) · ${cnt('disp')} dispensé(s) · ${cnt('inap')} inaptitude(s) partielle(s).
-      Touchez « 💪 Forme · 🔥 Motivation » pour que l'élève se positionne (1 à 10), et pour choisir les zones d'une inaptitude partielle.</div></div>
+      « Inapte partiel » : touchez les zones concernées, les machines qui les sollicitent sont retirées.</div></div>
     <div class="tiles">${sortedStudents().map(s => { const a = attOf(n, s.id), w = L.wb[s.id] || {}, z = L.z[s.id] || [];
       return `<div class="att-tile ${a ? ATT[a].cls : ''}">${band(s.id)}<div class="name">${esc(nameOf(s.id))}</div>
         <div class="btn-row"><button class="btn ${a==='abs'?'abs-on':''}" data-action="att" data-sid="${s.id}" data-v="abs">Absent</button>
         <button class="btn ${a==='disp'?'disp-on':''}" data-action="att" data-sid="${s.id}" data-v="disp">Dispensé</button>
         <button class="btn ${a==='inap'?'inapte-on':''}" data-action="att" data-sid="${s.id}" data-v="inap">Inapte partiel</button></div>
-        ${a === 'abs' || a === 'disp' ? '' : `<button class="btn small well-btn" data-action="appelWell" data-sid="${s.id}">💪 ${w.fo ?? '–'} · 🔥 ${w.mo ?? '–'}${z.length ? ` · 🩹 <b style="color:#D0161B">${esc(z.map(zoneName).join(', '))}</b>` : ''}</button>`}</div>`; }).join('')}</div>`;
+        ${a === 'inap' ? `<button class="btn small well-btn" data-action="appelWell" data-sid="${s.id}">🩹 ${z.length ? `<b style="color:#D0161B">${esc(z.map(zoneName).join(', '))}</b>` : 'Choisir les zones'}</button>` : ''}</div>`; }).join('')}</div>`;
 }
 function appelWellModal(sid){
   const n = curLesson(), L = lesson(n);
   const w = { ...(L.wb[sid] || {}) }; let sel = [...(L.z[sid] || [])];
-  const m = modal(`<h2>${esc(nameOf(sid))} · début de cours</h2><div id="aw-sc"></div>
-    <h3 style="margin-top:12px">🩹 Inaptitude partielle : zones concernées</h3>
+  const m = modal(`<h2>🩹 ${esc(nameOf(sid))} · inaptitude partielle : zones concernées</h2>
     <div class="pain-wrap"><div id="body-box"></div><div class="pain-side"><div class="btn-row" id="extra-z"></div><p id="pain-list" style="font-weight:800"></p></div></div>
     <div class="btn-row spread" style="margin-top:10px"><button class="btn" data-p="cancel">Annuler</button><button class="btn primary" data-p="ok">Valider</button></div>`, { wide:true });
   const draw = () => {
-    m.querySelector('#aw-sc').innerHTML = scale10('État de forme', '💪', w.fo, 'data-w="fo"', 'forme') + scale10('Motivation', '🔥', w.mo, 'data-w="mo"', 'motiv');
-    m.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { const v = +b.dataset.v; w[b.dataset.w] = w[b.dataset.w] === v ? null : v; draw(); });
     m.querySelector('#body-box').innerHTML = bodySVG(sel);
     m.querySelector('#extra-z').innerHTML = ZONES.filter(q => !q.x).map(q => `<button class="btn ${sel.includes(q.k)?'red':''}" data-z="${q.k}">${q.n}</button>`).join('');
     m.querySelector('#pain-list').textContent = sel.length ? sel.map(zoneName).join(' · ') + ' → machines adaptées' : 'Aucune zone';
@@ -1307,7 +1328,6 @@ function appelWellModal(sid){
   draw();
   m.querySelector('[data-p="cancel"]').onclick = () => closeModal();
   m.querySelector('[data-p="ok"]').onclick = () => {
-    if (w.fo || w.mo) L.wb[sid] = { fo: w.fo || null, mo: w.mo || null }; else delete L.wb[sid];
     if (sel.length) { L.z[sid] = sel; if (!L.att[sid]) L.att[sid] = 'inap'; } else { delete L.z[sid]; if (L.att[sid] === 'inap') delete L.att[sid]; }
     save(); closeModal(); render(); };
 }
@@ -1372,9 +1392,9 @@ function viewSuiviTiles(){
 function lessonSummary(n, sid){
   const r = res(n, sid), h = S.hist[sid]?.[n];
   if (r) { const pm = pilMeans(n, sid);
-    return { th: thOf(n), at: attOf(n, sid), mob: mobOf(n, sid), fo: foOf(n, sid), mo: moOf(n, sid), ex: (r.ex || []).length + (r.hip || []).length,
+    return { th: thOf(n), at: attOf(n, sid), mob: mobOf(n, sid), bg: borgMean(n, sid), ex: (r.ex || []).length + (r.hip || []).length,
       reps: (r.ex || []).reduce((a, E) => a + (E.k === 'max' ? 0 : repsDone(E)), 0), pil: avg(Object.values(pm)), og: avg(obsGiven(n, sid)), r, wu: r.wu }; }
-  if (h) return { th: h[0], at: h[1] || null, mob: h[2] || null, ex: h[3] || 0, reps: h[4] || 0, pil: h[5] ? h[5] / 10 : null, fo: h[6] || null, mo: h[7] || null, og: h[8] ? h[8] / 10 : null };
+  if (h) return { th: h[0], at: h[1] || null, mob: h[2] || null, ex: h[3] || 0, reps: h[4] || 0, pil: h[5] ? h[5] / 10 : null, bg: h[6] ? h[6] / 10 : null, og: h[8] ? h[8] / 10 : null };
   const at = attOf(n, sid), og = avg(obsGiven(n, sid)); return at || og != null ? { th: thOf(n), at, og } : null;
 }
 function maxTable(sid, n){
@@ -1400,10 +1420,10 @@ function viewSuiviDetail(sid){
   let rows = '';
   for (let n = 1; n <= N; n++) { const x = lessonSummary(n, sid); if (!x) continue; const T = THEMES[x.th] || {};
     rows += `<tr><td><b>L${n}</b></td><td>${T.ico || ''} ${esc(T.n || '')}${x.mob && (THEMES[x.th]?.mobs || []).length > 1 ? `<div class="muted" style="font-size:13px">${esc(MOB[x.mob]?.n || '')}</div>` : ''}</td>
-      <td>${x.at ? `<span class="tag ${ATT[x.at].cls}">${esc(ATT[x.at].n)}</span>` : ''}</td><td class="c">${chipV(x.fo)}</td><td class="c">${chipV(x.mo)}</td>
+      <td>${x.at ? `<span class="tag ${ATT[x.at].cls}">${esc(ATT[x.at].n)}</span>` : ''}</td><td class="c">${chipB(x.bg)}</td>
       <td class="c">${x.ex || '—'}</td><td class="c">${x.reps || '—'}</td><td class="c">${chipV(x.pil)}</td><td class="c">${chipV(x.og)}</td></tr>`;
     if (x.r && isProfRole() || x.r && UI.view === 'suiviDetail') { const det = (x.r.ex || []).map(E => `<div>${exLine(n, sid, E)}</div>`).join('') + (x.r.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') + (wuTxt(x.wu) ? `<div>🔥 Échauffement : ${esc(wuTxt(x.wu))}</div>` : '');
-      if (det) rows += `<tr class="det"><td></td><td colspan="8">${det}</td></tr>`; } }
+      if (det) rows += `<tr class="det"><td></td><td colspan="7">${det}</td></tr>`; } }
   const notes = evalLessons().map(n => ({ n, v: evalNote(n, sid) })).filter(x => x.v != null);
   const coach = []; for (let n = 1; n <= N; n++) if (thOf(n) === 'coach' && lesson(n).cn[sid]?.v) coach.push({ n, v: lesson(n).cn[sid].v });
   const P = S.projects[sid];
@@ -1411,7 +1431,7 @@ function viewSuiviDetail(sid){
       ${P ? `<div style="margin-top:6px;font-weight:800">📋 Projet : ${esc(MOB[P.mob]?.n || '')} · ${(P.ms || []).map(mName).join(', ')}</div>` : ''}
       ${notes.length || coach.length ? `<div class="row" style="margin-top:8px">${notes.map(x => `<span class="note-chip">${THEMES[thOf(x.n)].ico} L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}${coach.map(x => `<span class="note-chip">🎭 L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}</div>` : ''}</div>
     <div class="card"><h2>🏋️ Mes max</h2>${maxTable(sid)}</div>
-    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">💪 Forme</th><th class="c">🔥 Motiv.</th><th class="c">Exercices</th><th class="c">Rép.</th><th class="c">👀 Piliers reçus</th><th class="c">📊 Notes données</th></tr>${rows || '<tr><td colspan="9">Pas encore de séance.</td></tr>'}</table></div></div>`;
+    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">🥵 Borg</th><th class="c">Exercices</th><th class="c">Rép.</th><th class="c">👀 Piliers reçus</th><th class="c">📊 Notes données</th></tr>${rows || '<tr><td colspan="8">Pas encore de séance.</td></tr>'}</table></div></div>`;
 }
 
 function profMaxes(){
@@ -1426,10 +1446,10 @@ function profBilanL(){
   const N = S.settings.nbLessons, n = UI.bilN && UI.bilN <= N ? UI.bilN : curLesson(), P = lessonPils(n);
   return `<div class="card strong compact"><h2>🔎 Bilan de la leçon</h2><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(k=>`<button class="lp ${k===n?'on':''}" data-action="bilN" data-n="${k}"><span>${k}</span><small>${THEMES[thOf(k)].ico}</small></button>`).join('')}</div>
       <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(n))}${P.length ? ' · ' + P.map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div></div>
-    <div class="card"><div class="pj-table-wrap"><table class="pj-table"><tr><th>Élève</th><th>Statut</th><th class="c">💪</th><th class="c">🔥</th><th>🔥 Échauffement</th><th>Séance</th>${P.map(p => `<th class="c">${p.ico}</th>`).join('')}<th class="c" title="Moyenne des notes données en tant qu'observateur">📊 Notes<br>données</th></tr>
+    <div class="card"><div class="pj-table-wrap"><table class="pj-table"><tr><th>Élève</th><th>Statut</th><th class="c">🥵 Borg</th><th>🔥 Échauffement</th><th>Séance</th>${P.map(p => `<th class="c">${p.ico}</th>`).join('')}<th class="c" title="Moyenne des notes données en tant qu'observateur">📊 Notes<br>données</th></tr>
     ${sortedStudents().map(s => { const at = attOf(n, s.id), r = res(n, s.id), pm = pilMeans(n, s.id), z = zonesOf(n, s.id);
       return `<tr><td><b>${esc(nameOf(s.id))}</b></td><td>${at ? `<span class="tag ${ATT[at].cls}">${esc(ATT[at].n)}</span>` : ''}${z.length ? `<div class="muted" style="font-size:13px">🩹 ${esc(z.map(zoneName).join(', '))}</div>` : ''}</td>
-        <td class="c">${chipV(foOf(n, s.id))}</td><td class="c">${chipV(moOf(n, s.id))}</td><td style="font-size:14px">${esc(wuTxt(r?.wu))}${r?.wu?.ok ? ' ✓' : ''}</td>
+        <td class="c">${chipB(borgMean(n, s.id))}</td><td style="font-size:14px">${esc(wuTxt(r?.wu))}${r?.wu?.ok ? ' ✓' : ''}</td>
         <td style="font-size:14px">${(r?.ex || []).map(E => `<div>${exLine(n, s.id, E)}</div>`).join('') + (r?.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') || (at ? '' : '<span class="muted">rien reçu</span>')}</td>
         ${P.map(p => `<td class="c">${chipV(pm[p.id])}</td>`).join('')}<td class="c">${(g => g.length ? chipV(avg(g)) + `<div class="muted" style="font-size:12px">${g.length} note(s)</div>` : '<span class="muted">—</span>')(obsGiven(n, s.id))}</td></tr>`; }).join('')}</table></div>
       <div class="muted" style="font-weight:700;margin-top:6px">📊 Notes données : moyenne des notes de piliers que l'élève a mises en tant qu'observateur (moyenne de la classe : ${fmt(avg(obsGiven(n, null)))}).</div></div>`;
@@ -1869,7 +1889,7 @@ function buildSeance(n){
   list.forEach(s => {
     MACHINES.forEach(m => { const h = maxHist(s.id, m.id).filter(x => x.n <= n); if (h.length) (mx[s.id] = mx[s.id] || {})[m.id] = h.slice(-4).map(x => [Math.round(x.v * 10) / 10, x.n, x.mode || '']); });
     for (let k = 1; k < n; k++) { const x = lessonSummary(k, s.id); if (!x) continue;
-      (hist[s.id] = hist[s.id] || {})[k] = [x.th, x.at || 0, x.mob || 0, x.ex || 0, x.reps || 0, x.pil != null ? Math.round(x.pil * 10) : 0, x.fo || 0, x.mo || 0, x.og != null ? Math.round(x.og * 10) : 0]; }
+      (hist[s.id] = hist[s.id] || {})[k] = [x.th, x.at || 0, x.mob || 0, x.ex || 0, x.reps || 0, x.pil != null ? Math.round(x.pil * 10) : 0, x.bg != null ? Math.round(x.bg * 10) : 0, 0, x.og != null ? Math.round(x.og * 10) : 0]; }
     const P = S.projects[s.id]; if (P) pj[s.id] = { mob:P.mob, ms:P.ms, ts:P.ts || 1 };
   });
   const roles = L.th === 'coach' ? Object.fromEntries(ROOT.roles.map(r => [r.id, { n:r.n, t:r.t }])) : null;
@@ -2045,7 +2065,7 @@ function makeDemoFull(){
   names.forEach((x, i) => S.students.push({ id:newStudentId(), nom:x[0], prenom:x[1], grp: Math.floor(i / 7) + 1 }));
   const C1 = { t:'circuit', nb:6, dur:30 }, C3 = { t:'3x3' };
   const plan = [['max',['plac'],'e',C1],['vol',['plac','ampl'],'s',C1],['pui',['comp'],'s',C3],['ton',['ampl','fati'],'e',C1],['aff',['fati'],'s',C3],['hippo',[],'e',C1],
-    ['amax',['plac'],'e',C1],['evi',['plac','comp'],'s',C1],['coach',['comp'],'e',C1],['projet',['enco'],'s',C1],['vol',['ampl','comp'],'s',C3],['evf',['plac','comp','secu'],'s',C1]];
+    ['amax',['plac'],'e',C1],['evi',['plac','comp'],'s',C1],['coach',['comp'],'e',C1],['projet',['ampl'],'s',C1],['vol',['ampl','comp'],'s',C3],['evf',['plac','comp','secu'],'s',C1]];
   plan.forEach(([th, pil, suivi, wu], i) => { const L = lesson(i + 1); L.th = th; L.pil = [...pil]; L.suivi = suivi; L.wu = { ...wu }; });
   lesson(3).hs = ['butterfly']; lesson(10).hs = ['rowing']; lesson(12).crit = { comp:[0,2] };
   const st = S.students, P = {};
@@ -2055,7 +2075,7 @@ function makeDemoFull(){
   const rate = (n, sid, wf) => { const v = cl(Math.round(P[sid].sk + (n / 12) * 3 + R(-2, 2)), 0, 10); return wf ? [v, cl(Math.round(v / 2) + R(-1, 0), 0, 5)] : [v, null]; };
   const obsFill = (n, sid, E) => { const L = lesson(n), nb = L.suivi === 's' ? Math.max(1, (E.sets || []).length) : 1, wf = withFreq(E);
     E.ob = {}; E.fq = {}; L.pil.forEach(p => { E.ob[p] = []; E.fq[p] = []; for (let i = 0; i < nb; i++) { const [v, f] = rate(n, sid, wf); E.ob[p][i] = v; if (wf) E.fq[p][i] = f; } if (!wf) delete E.fq[p]; });
-    E.by = P[sid].part; };
+    E.bg = Array.from({ length: nb }, (_, i) => cl(R(4, 7) + Math.round(i * 3 / nb), 1, 10)); E.by = P[sid].part; };
   const addMax = (n, sid, r, m) => { const tm = trueMax(sid, m, n); if (tm == null || blockOf(n, sid, m)) return;
     let E; if (isPdc(m)) E = { id:rnd(5), k:'max', m, mode:'reps', r: Math.max(1, tm + R(-1, 1)), sets:[] };
     else if (Math.random() < .35) E = { id:rnd(5), k:'max', m, mode:'1rm', kg: r05(tm), r:1, sets:[] };
@@ -2080,8 +2100,8 @@ function makeDemoFull(){
       if (n > 1 && Math.random() < .04) { L.att[sid] = 'abs'; return; }
       if (n === 5 && si === 6) { L.att[sid] = 'disp'; return; }
       if ((n === 3 || n === 4) && si === 3) { L.att[sid] = 'inap'; L.z[sid] = ['geD','geG']; }
-      L.wb[sid] = { fo: cl(R(4, 9) + (Math.random() < .1 ? -3 : 0), 1, 10), mo: cl(P[sid].mo + R(-2, 2), 1, 10) };
-      const r = { ex:[], ts: now() - (13 - n) * 7 * 864e5 + si * 1000, d:'prof', fo: null, mo: null };
+      const fo = cl(R(4, 9) + (Math.random() < .1 ? -3 : 0), 1, 10);
+      const r = { ex:[], ts: now() - (13 - n) * 7 * 864e5 + si * 1000, d:'prof' };
       S.results[n][sid] = r;
       r.wu = th === 'coach' ? null : genWu(L.wu, sid, n);
       if (th === 'max') MAXSET.forEach(g => { const m = pick(g.filter(id => !blockOf(n, sid, id))); if (m) addMax(n, sid, r, m); });
@@ -2098,7 +2118,7 @@ function makeDemoFull(){
         L.cn[sid] = { v: cl(r05(5 + Math.random() * 4.5), 0, 10), com: pick(['Programme cohérent avec la demande.','Bon choix de mobile, conseils à développer.','Exercices adaptés, charges bien calculées.','Échauffement trop court pour ce rôle.']) };
       } else {
         const mob = th === 'pui' ? pick(['p66','p64']) : ['projet','evi','evf'].includes(th) ? P[sid].mob : THEMES[th].mobs[0];
-        r.mob = mob; if (mob === 'vol') r.ef = L.wb[sid].fo >= 6;
+        r.mob = mob; if (mob === 'vol') r.ef = fo >= 6;
         const prefer = th === 'evf' && S.projects[sid] ? S.projects[sid].ms : null;
         addTh(n, sid, r, mob, prefer);
         if (hasInap(n, sid)) { const E = { id:rnd(5), k:'free', nm:'Gainage latéral', s:3, r:30, rest:60, sets:[30,30,25], ts: now() }; obsFill(n, sid, E); r.ex.push(E); }
@@ -2121,15 +2141,15 @@ function exportXlsx(){
   const book = XLSX.utils.book_new(), add = (rows, name, w) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = rows[0].map((_, i) => ({ wch: (w && w[i]) || (i < 2 ? 16 : 14) })); XLSX.utils.book_append_sheet(book, ws, name); };
   const evL = evalLessons(), coL = []; for (let n = 1; n <= N; n++) if (thOf(n) === 'coach') coL.push(n);
   /* Synthèse */
-  const h = ['Nom','Prénom','Groupe','Présent','Absent','Dispensé','Inapt. partielle','Forme moy.','Motivation moy.','Projet : mobile','Projet : machines',
+  const h = ['Nom','Prénom','Groupe','Présent','Absent','Dispensé','Inapt. partielle','Borg moy. (ressenti)','Projet : mobile','Projet : machines',
     ...piliers().map(p => 'Pilier · ' + p.n), ...evL.map(n => `L${n} ${themeName(thOf(n))} /10`), ...coL.map(n => `L${n} Coach d'un jour /10`)];
   const syn = [h];
   list.forEach(s => { const c = { p:0, abs:0, disp:0, inap:0 }, fo = [], mo = [], pv = {};
     for (let n = 1; n <= N; n++) { const at = attOf(n, s.id); if (at) c[at]++; else if (res(n, s.id)) c.p++;
-      if (foOf(n, s.id)) fo.push(foOf(n, s.id)); if (moOf(n, s.id)) mo.push(moOf(n, s.id));
+      fo.push(...(res(n, s.id)?.ex || []).flatMap(borgOf));
       const r = res(n, s.id); (r?.ex || []).forEach(E => Object.entries(E.ob || {}).forEach(([pid, a]) => { (pv[pid] = pv[pid] || []).push(...vals(a)); })); }
     const P = S.projects[s.id];
-    syn.push([...id2(s), s.grp && nbGroups() > 1 ? groupName(s.grp) : '', c.p, c.abs, c.disp, c.inap, r1(avg(fo)), r1(avg(mo)), P ? MOB[P.mob]?.n || '' : '', P ? (P.ms || []).map(mName).join(', ') : '',
+    syn.push([...id2(s), s.grp && nbGroups() > 1 ? groupName(s.grp) : '', c.p, c.abs, c.disp, c.inap, r1(avg(fo)), P ? MOB[P.mob]?.n || '' : '', P ? (P.ms || []).map(mName).join(', ') : '',
       ...piliers().map(p => r1(avg(pv[p.id] || []))), ...evL.map(n => evalNote(n, s.id) ?? ''), ...coL.map(n => lesson(n).cn[s.id]?.v ?? '')]); });
   add(syn, 'Synthèse');
   /* Max */
@@ -2141,18 +2161,18 @@ function exportXlsx(){
   /* Séances */
   let maxS = 6; Object.values(S.results).forEach(b => Object.values(b).forEach(r => (r.ex || []).forEach(E => { maxS = Math.max(maxS, (E.sets || []).length); })));
   const se = [['Nom','Prénom','Leçon','Thème','Mobile','Type','Exercice','Groupe musculaire','Séries','Rép. prévues','% du max','Charge proposée','Récup (s)',
-    ...Array.from({length:maxS}, (_, i) => `Série ${i+1}`), 'Total rép.', ...piliers().map(p => p.n), ...piliers().map(p => p.n + ' · fréquence'), 'Observateur', 'Entre exercices']];
+    ...Array.from({length:maxS}, (_, i) => `Série ${i+1}`), 'Total rép.', ...piliers().map(p => p.n), ...piliers().map(p => p.n + ' · fréquence'), 'Borg', 'Observateur', 'Entre exercices']];
   list.forEach(s => { for (let n = 1; n <= N; n++) { const r = res(n, s.id); if (!r) continue;
     (r.ex || []).forEach(E => { const m = machine(E.m), t = E.k === 'max' ? null : target(n, s.id, E);
       se.push([...id2(s), n, themeName(thOf(n)), MOB[E.mob || mobOf(n, s.id)]?.n || '', { th:'Thème', max:'Prise de max', free:'Adapté', coach:'Coach' }[E.k], m ? m.n : E.nm || '', m ? GROUPS[m.g].n : '',
         t?.s ?? '', t?.r ?? (E.k === 'max' ? E.r ?? '' : ''), t?.pct ?? '', E.k === 'max' ? `max ${r1(E.v)}` : t?.zone?.t || '', t?.rest ?? '',
-        ...Array.from({length:maxS}, (_, i) => E.sets?.[i] ?? ''), E.k === 'max' ? '' : repsDone(E), ...piliers().map(p => r1(obMean(E, p.id))), ...piliers().map(p => (f => f.length ? FREQ[Math.round(avg(f))] : '')(vals(E.fq?.[p.id]))), E.by ? (E.by === 'x' ? 'Enseignant' : nameOf(E.by)) : '', E.it?.x ? (wuEx(E.it.x)?.n || '') + (E.it.ok ? ' ✓' : '') : '']); });
+        ...Array.from({length:maxS}, (_, i) => E.sets?.[i] ?? ''), E.k === 'max' ? '' : repsDone(E), ...piliers().map(p => r1(obMean(E, p.id))), ...piliers().map(p => (f => f.length ? FREQ[Math.round(avg(f))] : '')(vals(E.fq?.[p.id]))), r1(avg(borgOf(E))), E.by ? (E.by === 'x' ? 'Enseignant' : nameOf(E.by)) : '', E.it?.x ? (wuEx(E.it.x)?.n || '') + (E.it.ok ? ' ✓' : '') : '']); });
     (r.hip || []).forEach(x => se.push([...id2(s), n, 'Hippopogramme', '', 'Hippopogramme', mName(x.m), GROUPS[machine(x.m)?.g]?.n || '', 1, x.r, '', x.kg, '', x.r])); } });
   add(se, 'Séances');
   /* Appel et échauffements */
-  const ap = [['Nom','Prénom','Leçon','Thème','Statut','Zones (inaptitude)','Forme','Motivation','Échauffement','Exercices','Fait']];
+  const ap = [['Nom','Prénom','Leçon','Thème','Statut','Zones (inaptitude)','Borg moy.','Échauffement','Exercices','Fait']];
   list.forEach(s => { for (let n = 1; n <= N; n++) { const r = res(n, s.id), at = attOf(n, s.id); if (!r && !at && !lesson(n).wb[s.id]) continue;
-    ap.push([...id2(s), n, themeName(thOf(n)), at ? ATT[at].n : 'Présent', zonesOf(n, s.id).map(zoneName).join(', '), foOf(n, s.id) ?? '', moOf(n, s.id) ?? '',
+    ap.push([...id2(s), n, themeName(thOf(n)), at ? ATT[at].n : 'Présent', zonesOf(n, s.id).map(zoneName).join(', '), r1(borgMean(n, s.id)),
       r?.wu ? WU_TYPES[r.wu.t] || '' : '', wuTxt(r?.wu), r?.wu?.ok ? 'oui' : '']); } });
   add(ap, 'Appel & échauffement');
   /* Évaluations */
@@ -2186,7 +2206,7 @@ function makeDemo(){
   S.settings.nbLessons = 10; S.settings.current = 4; S.settings.nbGroups = 3;
   names.forEach((x, i) => S.students.push({ id:newStudentId(), nom:x[0], prenom:x[1], grp: i % 3 + 1 }));
   const plan = ['max','vol','pui','ton','aff','amax','evi','projet','coach','evf'];
-  plan.forEach((th, i) => { const L = lesson(i + 1); L.th = th; L.pil = [['plac'],['plac','ampl'],['comp'],['ampl','fati'],['fati'],['plac'],['plac','comp'],['enco'],['comp'],['plac','comp','secu']][i];
+  plan.forEach((th, i) => { const L = lesson(i + 1); L.th = th; L.pil = [['plac'],['plac','ampl'],['comp'],['ampl','fati'],['fati'],['plac'],['plac','comp'],['ampl'],['comp'],['plac','comp','secu']][i];
     L.suivi = i % 2 ? 's' : 'e'; L.wu = i % 3 === 2 ? { t:'3x3' } : { t:'circuit', nb:6, dur:30 }; });
   const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1)), pick = a => a[Math.floor(Math.random() * a.length)];
   const base = { dc:[25,55], chest_press:[30,70], tirage_vertical:[30,60], presse:[80,180], legcurl:[25,60], shoulder:[15,40], biceps_curl:[10,30], pompes:[8,35], tractions:[1,12], rowing:[25,55], ischios:[20,45], abdos:[20,60] };
@@ -2196,7 +2216,6 @@ function makeDemo(){
     for (let n = 1; n <= 3; n++) { const L = lesson(n);
       if (L.att[s.id] === 'abs') continue;
       if (n === 2 && si === 3) { L.att[s.id] = 'inap'; L.z[s.id] = ['geD']; }
-      L.wb[s.id] = { fo: R(4, 10), mo: R(4, 10) };
       S.results[n] = S.results[n] || {};
       const r = { ex:[], ts: now() - (4 - n) * 864e5, d:'prof', wu:{ t:L.wu.t, ok:true, ...(L.wu.t === 'circuit' ? { ex:['mc','cs','jj','po','ab','sq'] } : { p:'pompes', c:'jj', e:'velo' }) } };
       if (n === 1) Object.keys(base).filter(() => Math.random() < .6).forEach(mid => { const [a, b] = base[mid];
@@ -2205,9 +2224,9 @@ function makeDemo(){
       r.ex.forEach(E => { if (E.k === 'max') E.v = maxFromEntry(E); });
       S.results[n][s.id] = r;
       if (n === 2) { r.mob = 'vol'; const g1 = pick([['dc','chest_press'],['tirage_vertical','rowing']]), g2 = pick([['presse','legcurl'],['shoulder','biceps_curl']]);
-        [...g1, ...g2].forEach(mid => { if (blockOf(2, s.id, mid)) return; r.ex.push({ id:rnd(5), k:'th', m:mid, mob:'vol', by: obsOf(si), sets:[10,10,R(8,10),R(6,10)], ob:{ plac:[R(4,10),R(4,10),R(4,10),R(4,10)], ampl:[R(3,9),R(3,9),R(3,9),R(3,9)] }, fq:{ plac:[R(2,5),R(2,5),R(2,5),R(2,5)], ampl:[R(1,5),R(1,5),R(1,5),R(1,5)] } }); }); }
+        [...g1, ...g2].forEach(mid => { if (blockOf(2, s.id, mid)) return; r.ex.push({ id:rnd(5), k:'th', m:mid, mob:'vol', by: obsOf(si), sets:[10,10,R(8,10),R(6,10)], ob:{ plac:[R(4,10),R(4,10),R(4,10),R(4,10)], ampl:[R(3,9),R(3,9),R(3,9),R(3,9)] }, bg:[R(4,6),R(5,7),R(6,8),R(7,9)], fq:{ plac:[R(2,5),R(2,5),R(2,5),R(2,5)], ampl:[R(1,5),R(1,5),R(1,5),R(1,5)] } }); }); }
       if (n === 3) { r.mob = pick(['p66','p64']); ['dc','presse','tirage_vertical'].forEach(mid => { if (blockOf(3, s.id, mid)) return; const M = MOB[r.mob];
-        r.ex.push({ id:rnd(5), k:'th', m:mid, mob:r.mob, by: obsOf(si), sets:Array.from({length:M.s}, () => R(M.r - 2, M.r)), ob:{ comp:[R(3,10)] }, fq:{ comp:[R(1,5)] } }); }); }
+        r.ex.push({ id:rnd(5), k:'th', m:mid, mob:r.mob, by: obsOf(si), sets:Array.from({length:M.s}, () => R(M.r - 2, M.r)), bg:[R(6,9)], ob:{ comp:[R(3,10)] }, fq:{ comp:[R(1,5)] } }); }); }
     }
   });
   lesson(4).hs = ['butterfly'];
