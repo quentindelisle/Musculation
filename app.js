@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -86,6 +86,17 @@ const MOB = {
          d:'3 exercices · 5 séries de 20 · récup 30 s · 50 % du max · 6 min d\'endurance entre chaque exercice' },
 };
 const MOB_IDS = ['vol','p66','p64','ton','aff'];
+/* Paramètres des mobiles réglables par l'enseignant (séries, répétitions, récupération, % du max) */
+const MOB_DEF = Object.fromEntries(MOB_IDS.map(k => [k, { s:MOB[k].s, r:MOB[k].r, rest:MOB[k].rest, pct:MOB[k].pct, ...(MOB[k].pctLow ? { pctLow:MOB[k].pctLow } : {}) }]));
+const MOB_BASE = { vol:'Esthétique / Volume', p66:'Sportif / Puissance', p64:'Sportif / Puissance', ton:'Santé / Tonification', aff:'Santé / Affinement' };
+function applyMobParams(P){
+  MOB_IDS.forEach(k => { const M = MOB[k], o = { ...MOB_DEF[k], ...((P || {})[k] || {}) };
+    Object.assign(M, o);
+    M.n = MOB_BASE[k] + (k === 'p66' || k === 'p64' ? ` · ${M.s} × ${M.r}` : '');
+    const pc = M.pctLow ? `${M.pctLow} à ${M.pct} % du max` : `${M.pct} % du max`;
+    M.d = (k === 'vol' ? '2 groupes musculaires · 2 exercices par groupe' : M.rule === 'diff' ? '3 exercices sur 3 groupes différents' : '3 exercices')
+      + ` · ${M.s} séries de ${M.r} · récup ${fmtRest(M.rest)} · ${pc}` + (M.inter ? ` · 6 min ${M.inter === 'endu' ? 'd\'endurance' : 'de cardio'} entre chaque exercice` : ''); });
+}
 const THEMES = {
   max:     { n:'Prise de Max', ico:'🏋️', c:'#0062C4' },
   vol:     { n:'Esthétique / Volume', ico:'💎', c:'#8A2BE2', mobs:['vol'] },
@@ -186,6 +197,7 @@ function loadRoot(){
   if (!ROOT.suiviE) { Object.values(ROOT.classes).forEach(c => Object.values(c.lessons || {}).forEach(L => { L.suivi = 'e'; })); ROOT.suiviE = true; }
   if (!ROOT.roles) ROOT.roles = DEFAULT_ROLES.map(r => ({ ...r }));
   if (!ROOT.mOff) ROOT.mOff = [];
+  applyMobParams(ROOT.mob);
   Object.values(ROOT.classes).forEach(normClass);
   if (!Object.keys(ROOT.classes).length) { const c = newClassState('Classe 1'); ROOT.classes[c.id] = c; }
   if (!ROOT.classes[ROOT.active]) ROOT.active = Object.keys(ROOT.classes)[0];
@@ -784,18 +796,21 @@ function wuBlock(n, sid, r){
 /* Choix du mobile (Puissance 6×6 / 6×4 ; projet et évaluations : les 5 mobiles) */
 function mobBlock(n, sid, r){
   const th = thOf(n), T = THEMES[th], mob = mobOf(n, sid), M = MOB[mob];
-  let h = `<section class="mob-sec">`;
-  if (T.mobs.length > 1) h += `<h2>🎯 ${th === 'pui' ? 'Je choisis ma formule' : 'Je choisis mon mobile'}</h2><div class="mob-grid">${T.mobs.map(k => `<button class="mob-btn ${mob === k ? 'on' : ''}" data-action="setMob" data-m="${k}"><b>${MOB[k].ico} ${esc(MOB[k].n)}</b><small>${esc(MOB[k].d)}</small></button>`).join('')}</div>`;
+  let h = `<section class="mob-sec ${T.mobs.length > 1 && !mob ? 'todo' : ''}">`;
+  const todo = T.mobs.length > 1 && !mob;
+  if (th === 'pui') h += `<h2>${todo ? '👉 ' : ''}🎯 Je choisis ma formule</h2><div class="or-row">${mobChoice('p66', mob)}<span class="or">OU</span>${mobChoice('p64', mob)}</div>`;
+  else if (T.mobs.length > 1) h += `<h2>${todo ? '👉 ' : ''}🎯 Je choisis mon mobile</h2><div class="mob-grid">${T.mobs.map(k => mobChoice(k, mob)).join('')}</div>`;
   else if (M) h += `<h2>${M.ico} ${esc(M.n)}</h2><div class="muted" style="font-weight:800">${esc(M.d)}</div>`;
   if (M?.ry) h += `<div class="ry-box">🎵 <b>Rythme</b> : ${esc(M.ry)}</div>`;
   if (mob === 'vol') { const ef = enForme(n, sid);
-    h += `<div class="row" style="margin-top:10px"><b>Aujourd'hui :</b><div class="seg" style="min-width:320px"><button class="${ef ? 'on norm' : ''}" data-action="setEf" data-v="1">💪 En forme · 75 %</button><button class="${!ef ? 'on easy' : ''}" data-action="setEf" data-v="0">😐 Pas en forme · 70 %</button></div></div>`; }
+    h += `<div class="row" style="margin-top:10px"><b>Aujourd'hui :</b><div class="seg" style="min-width:320px"><button class="${ef ? 'on norm' : ''}" data-action="setEf" data-v="1">💪 En forme · ${MOB.vol.pct} %</button><button class="${!ef ? 'on easy' : ''}" data-action="setEf" data-v="0">😐 Pas en forme · ${MOB.vol.pctLow} %</button></div></div>`; }
   if (T.proj) { const P = S.projects[sid];
     h += `<div class="proj-box"><b>📋 Mon projet</b> ${P ? `<span class="muted" style="font-weight:700">${esc(MOB[P.mob]?.n || '')} · ${(P.ms || []).map(mName).join(', ')}</span>` : '<span class="muted">pas encore enregistré</span>'}
       <div class="btn-row" style="margin-top:6px">${P && !(r.ex || []).some(E => E.k === 'th') ? `<button class="btn small primary" data-action="loadProj">📋 Reprendre mon projet</button>` : ''}
       <button class="btn small" data-action="saveProj" ${mob ? '' : 'disabled'}>💾 Enregistrer ma séance comme projet</button></div></div>`; }
   return h + `</section>`;
 }
+const mobChoice = (k, cur) => `<button class="mob-btn ${cur === k ? 'on' : ''}" data-action="setMob" data-m="${k}"><b>${MOB[k].ico} ${esc(MOB[k].n)}</b><small>${esc(MOB[k].d)}</small></button>`;
 /* Rappel des piliers observés et de leurs observables */
 function pilReminder(n){
   const P = lessonPils(n); if (!P.length) return '';
@@ -955,7 +970,7 @@ function coachBlock(n, sid, r){
   return `<section class="coach-sec"><h2>🎭 Coach d'un jour · ${esc(R.n)}</h2><blockquote class="role-txt">${esc(R.t)}</blockquote>
     ${ta('comp', 'Ce que je comprends des envies du rôle', 'Il / elle veut…')}
     ${ta('trav', 'Je pense que ce rôle doit travailler sur', 'Les groupes musculaires, la qualité…')}
-    <div class="field">Je choisis le mobile<div class="mob-grid">${MOB_IDS.map(k => `<button class="mob-btn sm ${C.mob === k ? 'on' : ''}" data-action="coachMob" data-m="${k}"><b>${MOB[k].ico} ${esc(MOB[k].n)}</b></button>`).join('')}</div></div>
+    <div class="field ${C.mob ? '' : 'todo-box'}">${C.mob ? '' : '👉 '}Je choisis le mobile<div class="mob-grid">${MOB_IDS.map(k => `<button class="mob-btn sm ${C.mob === k ? 'on' : ''}" data-action="coachMob" data-m="${k}"><b>${MOB[k].ico} ${esc(MOB[k].n)}</b></button>`).join('')}</div></div>
     <label class="field">🧪 Mon cobaye (l'élève qui réalise mon programme)<select data-field="coachCob"><option value="">— moi-même —</option>${sortedStudents().filter(s => s.id !== sid && present(n, s.id)).map(s => `<option value="${s.id}" ${C.cob === s.id ? 'selected' : ''}>${esc(nameOf(s.id))}</option>`).join('')}</select></label>
     <div class="muted" style="font-weight:700">Choisis ci-dessous l'échauffement de ton cobaye, puis écris les exercices avec <b>➕ Exercice de mon programme</b> : séries, répétitions, charge et récupération sont proposées à partir du mobile et du max de ton cobaye, tu peux les modifier.</div>
     ${ta('cons', 'Quels conseils pour les prochaines semaines donnerais-tu à ce rôle ?', 'Conseils…')}</section>`;
@@ -1237,7 +1252,7 @@ function openProf(){
   pinPad(() => { UI.profUnlocked = true; UI.profTab = 'menu'; go('prof'); });
 }
 const PSECT = {
-  prep:   { ico:'🛠', t:'Préparer le cycle', tabs:[['classes','👥 Classe & élèves'],['groupes','🎽 Groupes'],['cycle','📅 Cycle & leçons'],['piliers','🏛 Piliers & observables'],['machines','🏋️ Machines de la salle'],['roles','🎭 Rôles Coach d\'un jour']] },
+  prep:   { ico:'🛠', t:'Préparer le cycle', tabs:[['classes','👥 Classe & élèves'],['groupes','🎽 Groupes'],['cycle','📅 Cycle & leçons'],['piliers','🏛 Piliers & observables'],['mobiles','🎯 Mobiles'],['machines','🏋️ Machines de la salle'],['roles','🎭 Rôles Coach d\'un jour']] },
   jour:   { ico:'📅', t:'Leçon du jour', tabs:[['appel','✅ Appel'],['hs','🚫 Machines HS'],['tirage','🎲 Coach : tirage'],['evalJ','📝 Évaluer'],['qr','📲 QR de la leçon'],['saisieP','✍️ Saisie (dépannage)']] },
   recup:  { ico:'📥', t:'Récupérer les saisies', tabs:[] },
   bilans: { ico:'📊', t:'Suivi et bilans', tabs:[['suiviP','👤 Suivi élève'],['maxes','🏋️ Max de la classe'],['bilanL','🔎 Bilan par leçon'],['evals','📝 Notes des évaluations'],['coachB','🎭 Coach d\'un jour'],['export','📁 Export & sauvegarde']] } };
@@ -1255,7 +1270,7 @@ function viewProf(){
   let t = UI.profTab || 'menu';
   if (t === 'menu' || PREDIR[t]) { UI.profTab = 'menu'; return profMenu(); }
   const sec = sectOf(t); if (!sec) { UI.profTab = 'menu'; return profMenu(); }
-  const B = { classes: () => profClasses() + profEleves(), groupes: profGroupes, cycle: profCycle, piliers: profPiliers, machines: profMachines, roles: profRoles,
+  const B = { classes: () => profClasses() + profEleves(), groupes: profGroupes, cycle: profCycle, piliers: profPiliers, mobiles: profMobiles, machines: profMachines, roles: profRoles,
     appel: profAppel, hs: profHS, tirage: profTirage, evalJ: () => profEvals(curLesson()), qr: profSeanceQR, recup: profRecup,
     maxes: profMaxes, bilanL: profBilanL, evals: () => profEvals(), coachB: profCoachB, export: () => profExport() + profTransfert() };
   return sectHeader(sec) + (B[t] ? B[t]() : '');
@@ -1300,6 +1315,14 @@ function profCycle(){
     <div class="card compact"><h2>📖 Les mobiles</h2><table class="simple"><tr><th>Mobile</th><th>Séries × rép.</th><th>Charge</th><th>Récup</th><th>Rythme</th><th>Organisation</th></tr>
       ${MOB_IDS.map(k => { const M = MOB[k]; return `<tr><td><b>${M.ico} ${esc(M.n)}</b></td><td>${M.s} × ${M.r}</td><td>${M.pctLow ? M.pctLow + ' à ' : ''}${M.pct} %</td><td>${fmtRest(M.rest)}</td><td>${esc(M.ry)}</td><td>${esc(M.d.split(' · ')[0])}${M.inter ? ' · 6 min ' + (M.inter === 'endu' ? 'endurance' : 'cardio') + ' entre les exercices' : ''}</td></tr>`; }).join('')}</table>
       <div class="muted" style="font-weight:700;margin-top:6px">Charge proposée par zone de 5 kg (32 kg → entre 30 et 35 kg). Exercices au poids de corps : répétitions = % du max de répétitions.</div></div>`;
+}
+function profMobiles(){
+  const f = (k, key, v, step, max, unit) => `<label class="num-in"><input type="number" inputmode="numeric" step="${step}" min="1" max="${max}" data-field="mobP" data-m="${k}" data-k="${key}" value="${v}"><span>${unit}</span></label>`;
+  return `<div class="card strong"><h2>🎯 Paramètres des mobiles</h2><div class="muted" style="font-weight:700">Séries, répétitions, récupération (en secondes) et pourcentage du max. Ces réglages valent pour toutes les classes et partent sur les tablettes avec le QR de la leçon.</div></div>
+    <div class="card"><table class="simple mob-tab"><tr><th>Mobile</th><th>Séries</th><th>Répétitions</th><th>Récupération</th><th>% du max</th><th>Rythme</th></tr>
+    ${MOB_IDS.map(k => { const M = MOB[k]; return `<tr><td><b>${M.ico} ${esc(M.n)}</b></td><td>${f(k, 's', M.s, 1, 20, '')}</td><td>${f(k, 'r', M.r, 1, 50, '')}</td><td>${f(k, 'rest', M.rest, 5, 600, 's')}<div class="muted" style="font-size:12px">⏳ ${fmtRest(M.rest)}</div></td>
+      <td>${M.pctLow ? `${f(k, 'pctLow', M.pctLow, 1, 100, '%')} <small>pas en forme</small><br>` : ''}${f(k, 'pct', M.pct, 1, 100, '%')}${M.pctLow ? ' <small>en forme</small>' : ''}</td><td style="font-size:13px">${esc(M.ry)}</td></tr>`; }).join('')}</table>
+    <div class="btn-row" style="margin-top:8px"><button class="btn small ghost" data-action="mobReset">↺ Revenir aux valeurs proposées</button></div></div>`;
 }
 function profPiliers(){
   return `<div class="card strong"><h2>🏛 Piliers et observables</h2><div class="muted" style="font-weight:700">3 observables par pilier, affichés à l'observateur sur la tablette. Le pilier 🛡️ Sécurité est proposé pour l'évaluation finale.</div></div>
@@ -1378,6 +1401,13 @@ function profSeanceQR(){
    Évaluations : intermédiaire (1 à 3 piliers par élève) et finale (piliers + Sécurité)
    Note de chaque pilier de 1 à 10 → note /10 = moyenne
    --------------------------------------------------------------------- */
+/* évaluation intermédiaire : carnet d'entraînement /4 + note d'observateur /4 */
+function evExtra(n, sid){
+  const cn = carnetNote(n, sid), cl = carnetLesson(n, sid), on = observerNote(n, sid), obs = observedBy(n, sid);
+  return `<div class="ev-extra"><div><span>📒 Carnet d'entraînement</span><b class="note4">${cn != null ? fmt(cn) : '—'}<small>/4</small></b><small class="muted" title="${esc(carnetTip(cl))}">aujourd'hui : ${cl ? fmt(cl.v) : '—'}/4</small></div>
+    <div><span>👀 Observateur${obs.length ? ' de ' + esc(obs.map(nameOf).join(', ')) : ''}</span><b class="note4">${on ? fmt(on.v) : '—'}<small>/4</small></b>
+      <small class="muted">${on ? on.rows.map(x => `${pilier(x.pid)?.ico || ''} ${fmt(x.o)} / ${x.t} → ${fmt(x.pts)}`).join(' · ') : obs.length ? 'notez d\'abord l\'élève observé' : 'aucune observation saisie'}</small></div></div>`;
+}
 function evalLessons(){ const l = []; for (let n = 1; n <= S.settings.nbLessons; n++) if (['evi','evf'].includes(thOf(n))) l.push(n); return l; }
 function profEvals(fixed){
   if (fixed && thOf(fixed) === 'coach') return profCoachB(fixed);
@@ -1388,8 +1418,11 @@ function profEvals(fixed){
   const head = `<div class="card strong"><h2>${THEMES[th].ico} ${esc(THEMES[th].n)} · Leçon ${n}</h2>${pick}
     <div class="muted" style="font-weight:700;margin-top:6px">${th === 'evi' ? 'Choisissez 1 à 3 piliers pour chaque élève, puis placez le curseur de 1 à 10 pour chaque pilier : la note /10 est la moyenne.'
       : `Piliers et critères retenus dans le cycle : ${L.pil.map(id => pilier(id)?.n).filter(Boolean).join(' · ') || '<b>aucun</b> (Préparer → Cycle & leçons)'}. Note de 1 à 10 par pilier → note /10.`}</div></div>`;
+  const bar = th === 'evi' ? `<details class="card compact bareme"><summary><b>📒 Barème du carnet d'entraînement /4 · 👀 note d'observateur /4</b></summary>
+      <table class="simple"><tr><th>Carnet d'entraînement (par leçon, moyenne des leçons jusqu'à l'évaluation)</th><th>Points</th></tr>${CARNET_BAREME.map(([t, p, d]) => `<tr><td><b>${t}</b> : ${esc(d)}</td><td class="c">${fmt(p)}</td></tr>`).join('')}<tr><td>Saisie partielle : points au prorata · note arrondie au quart de point · l'élève observé et son observateur sont responsables ensemble de la fiche</td><td class="c"><b>/4</b></td></tr></table>
+      <table class="simple" style="margin-top:8px"><tr><th>Note d'observateur : écart entre sa note et la vôtre, pour chaque pilier évalué</th><th>Points</th></tr>${[['≤ 0,5 point', 4], ['≤ 1 point', 3.5], ['≤ 1,5 point', 3], ['≤ 2 points', 2.5], ['≤ 2,5 points', 2], ['… −0,5 par demi-point d\'écart en plus', '']].map(([a, b]) => `<tr><td>Écart ${a}</td><td class="c">${b === '' ? '' : fmt(b) + '/4'}</td></tr>`).join('')}<tr><td>Moyenne des piliers, arrondie au quart de point</td><td class="c"><b>/4</b></td></tr></table></details>` : '';
   const list = sortedStudents();
-  return head + `<div class="ev-list">${list.map(s => { const at = attOf(n, s.id);
+  return head + bar + `<div class="ev-list">${list.map(s => { const at = attOf(n, s.id);
     if (at === 'abs' || at === 'disp') return `<div class="ev-card off">${band(s.id)}<b>${esc(nameOf(s.id))}</b> <span class="tag abs">${ATT[at].n}</span></div>`;
     const ids = evalPils(n, s.id), e = L.ev[s.id] || {}, note = evalNote(n, s.id), om = pilMeans(n, s.id);
     const chips = th === 'evi' ? `<div class="ev-chips">${piliers().map(p => `<button class="pchip sm ${ids.includes(p.id) ? 'on' : ''}" data-action="evpToggle" data-n="${n}" data-sid="${s.id}" data-p="${p.id}">${p.ico} ${esc(p.n)}</button>`).join('')}</div>` : '';
@@ -1397,7 +1430,7 @@ function profEvals(fixed){
       ${ids.map(id => { const p = pilier(id); if (!p) return ''; const v = e[id];
         return `<div class="ev-row"><span class="ev-p">${p.ico} ${esc(p.n)}${om[id] != null ? `<small>observateur : ${fmt(om[id])}</small>` : ''}</span>
           <input type="range" min="1" max="10" step="1" value="${v ?? 5}" class="${v == null ? 'unset' : ''}" data-field="evV" data-n="${n}" data-sid="${s.id}" data-p="${id}" style="--rc:${v ? scaleColor(v) : '#C9D1E0'}">
-          <b class="ev-v" style="background:${v ? scaleColor(v) : '#fff'};color:${v ? scaleText(v) : '#5B6478'}">${v ?? '–'}</b></div>`; }).join('')}</div>`; }).join('')}</div>`;
+          <b class="ev-v" style="background:${v ? scaleColor(v) : '#fff'};color:${v ? scaleText(v) : '#5B6478'}">${v ?? '–'}</b></div>`; }).join('')}${th === 'evi' ? evExtra(n, s.id) : ''}</div>`; }).join('')}</div>`;
 }
 /* =====================================================================
    Suivi élève (tablette et prof), max de la classe, bilans, coach d'un jour
@@ -1465,14 +1498,17 @@ function profMaxes(){
 function profBilanL(){
   const N = S.settings.nbLessons, n = UI.bilN && UI.bilN <= N ? UI.bilN : curLesson(), P = lessonPils(n);
   return `<div class="card strong compact"><h2>🔎 Bilan de la leçon</h2><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(k=>`<button class="lp ${k===n?'on':''}" data-action="bilN" data-n="${k}"><span>${k}</span><small>${THEMES[thOf(k)].ico}</small></button>`).join('')}</div>
-      <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(n))}${P.length ? ' · ' + P.map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div></div>
-    <div class="card"><div class="pj-table-wrap"><table class="pj-table"><tr><th>Élève</th><th>Statut</th><th class="c">🥵 Borg</th><th>🔥 Échauffement</th><th>Séance</th>${P.map(p => `<th class="c">${p.ico}</th>`).join('')}<th class="c" title="Moyenne des notes données en tant qu'observateur">📊 Notes<br>données</th></tr>
-    ${sortedStudents().map(s => { const at = attOf(n, s.id), r = res(n, s.id), pm = pilMeans(n, s.id), z = zonesOf(n, s.id);
-      return `<tr><td><b>${esc(nameOf(s.id))}</b></td><td>${at ? `<span class="tag ${ATT[at].cls}">${esc(ATT[at].n)}</span>` : ''}${z.length ? `<div class="muted" style="font-size:13px">🩹 ${esc(z.map(zoneName).join(', '))}</div>` : ''}</td>
-        <td class="c">${chipB(borgMean(n, s.id))}</td><td style="font-size:14px">${esc(wuTxt(r?.wu))}${r?.wu?.ok ? ' ✓' : ''}</td>
-        <td style="font-size:14px">${(r?.ex || []).map(E => `<div>${exLine(n, s.id, E)}</div>`).join('') + (r?.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') || (at ? '' : '<span class="muted">rien reçu</span>')}</td>
-        ${P.map(p => `<td class="c">${chipV(pm[p.id])}</td>`).join('')}<td class="c">${(g => g.length ? chipV(avg(g)) + `<div class="muted" style="font-size:12px">${g.length} note(s)</div>` : '<span class="muted">—</span>')(obsGiven(n, s.id))}</td></tr>`; }).join('')}</table></div>
-      <div class="muted" style="font-weight:700;margin-top:6px">📊 Notes données : moyenne des notes de piliers que l'élève a mises en tant qu'observateur (moyenne de la classe : ${fmt(avg(obsGiven(n, null)))}).</div></div>`;
+      <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(n))}${P.length ? ' · ' + P.map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div>
+      <div class="legend-dots">${[['#0B4F1C','toutes les répétitions'],['#86DC96','≥ 90 %'],['#FFD000','≥ 75 %'],['#F07000','≥ 50 %'],['#D0161B','moins de 50 %'],['#C9D1E0','non saisi']].map(([c, t]) => `<span>${dotC(c)} ${t}</span>`).join('')}</div></div>
+    <div class="card"><div class="pj-table-wrap"><table class="pj-table bil-tab"><tr><th>Élève</th><th class="c">🥵</th><th>🔥</th><th>Séance</th>${P.map(p => `<th class="c" title="${esc(p.n)}">${p.ico}</th>`).join('')}<th class="c" title="Notes données en tant qu'observateur">📊 Notes<br>données</th><th class="c" title="Carnet d'entraînement">📒 /4</th></tr>
+    ${sortedStudents().map(s => { const at = attOf(n, s.id), r = res(n, s.id), pm = pilMeans(n, s.id), z = zonesOf(n, s.id), om = obsMissing(n, s.id), og = obsGiven(n, s.id), cl = carnetLesson(n, s.id);
+      return `<tr><td><b>${esc(nameOf(s.id))}</b>${at ? ` <span class="tag ${ATT[at].cls}">${esc(ATT[at].n)}</span>` : ''}${z.length ? `<div class="muted" style="font-size:12px">🩹 ${esc(z.map(zoneName).join(', '))}</div>` : ''}</td>
+        <td class="c">${chipB(borgMean(n, s.id))}</td><td>${wuIcons(r?.wu)}</td>
+        <td>${(r?.ex || []).map(E => exShort(n, s.id, E)).join('') + (r?.hip || []).map(h => `<div class="exs">${hipLine(h)}</div>`).join('') || (at ? '' : '<span class="muted">rien reçu</span>')}</td>
+        ${P.map(p => `<td class="c">${chipV(pm[p.id])}</td>`).join('')}
+        <td class="c">${og.length || om.miss ? `${og.length ? chipV(avg(og)) : ''}<div style="font-size:12px;font-weight:800" class="${om.miss ? 'down' : 'muted'}">${om.miss ? `⚠️ ${om.miss} oubliée${om.miss > 1 ? 's' : ''}` : '✓ aucun oubli'}</div>` : '<span class="muted">—</span>'}</td>
+        <td class="c" title="${esc(carnetTip(cl))}">${cl ? `<b class="note4">${fmt(cl.v)}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</table></div>
+      <div class="muted" style="font-weight:700;margin-top:6px">📊 Notes données : moyenne des notes de piliers mises en tant qu'observateur et nombre de notes oubliées (piliers et Borg des exercices terminés). 📒 Carnet d'entraînement /4 : voir le barème dans 📝 Notes des évaluations (survoler la note pour le détail).</div></div>`;
 }
 function profCoachB(fixed){
   const ls = []; for (let k = 1; k <= S.settings.nbLessons; k++) if (thOf(k) === 'coach') ls.push(k);
@@ -1545,6 +1581,99 @@ function printFiches(ids){
   UI.view = was;
   document.body.classList.add('printing');
   setTimeout(() => { window.print(); setTimeout(() => { document.body.classList.remove('printing'); root.innerHTML = ''; }, 500); }, 300);
+}
+/* =====================================================================
+   Bilan condensé, notes oubliées, carnet d'entraînement /4, note d'observateur /4
+   ===================================================================== */
+const ratioCol = q => q == null ? '#C9D1E0' : q >= 1 ? '#0B4F1C' : q >= .9 ? '#86DC96' : q >= .75 ? '#FFD000' : q >= .5 ? '#F07000' : '#D0161B';
+const dotC = (c, t) => `<span class="cdot" style="background:${c}" title="${esc(t || '')}"></span>`;
+/* une ligne par exercice : pastille de réussite des répétitions, charge, répétitions faites / prévues, piliers, Borg, observateur */
+function exShort(n, sid, E){
+  const m = machine(E.m), nm = m ? m.n : (E.nm || 'Exercice adapté'), ob = observerOf(n, sid, E);
+  const by = ob && ob !== 'x' && student(ob) ? ` <span class="muted">👀 ${esc(nameOf(ob))}</span>` : '';
+  const bg = avg(borgOf(E)), bgs = bg != null ? ' ' + chipB(bg) : '';
+  const pils = Object.keys(E.ob || {}).map(id => { const v = obMean(E, id); if (v == null) return ''; const k = noteSucc(v);
+    return `<span class="pil-mini" style="background:${SUCC[k].c};color:${SUCC[k].f}" title="${esc(pilier(id)?.n || '')}">${pilier(id)?.ico || '👀'} ${fmt(v)}</span>`; }).filter(Boolean).join(' ');
+  if (E.k === 'max') return `<div class="exs">${dotC(E.v ? '#0062C4' : '#C9D1E0', 'prise de max')}🏋️ <b>${esc(nm)}</b> · max <b>${fmtMax(E.m, E.v)}</b>${E.mode === 'brz' && E.kg ? ` <span class="muted">(${fmt(E.kg)} kg × ${E.r})</span>` : ''} ${pils}${bgs}${by}</div>`;
+  const t = target(n, sid, E), tot = t && t.s ? t.s * t.r : null, done = repsDone(E), q = tot ? done / tot : null;
+  const load = t?.zone ? t.zone.t.replace('entre ', '').replace(' et ', '–') : t?.kg ? fmtKg(t.kg) : t?.pdc ? 'PDC' : '';
+  return `<div class="exs">${dotC(vals(E.sets).length ? ratioCol(q) : '#C9D1E0', tot ? `${done} / ${tot} répétitions` : '')}<b>${esc(nm)}</b>${load ? ` · ${esc(load)}` : ''} · <b>${done}</b>${tot ? `/${tot}` : ''} reps ${pils}${bgs}${E.it?.ok ? ` <span title="6 min ${esc(wuEx(E.it.x)?.n || '')}">⏱️</span>` : ''}${by}</div>`;
+}
+function wuIcons(w){
+  if (!w) return '';
+  const ids = w.t === '3x3' || w.p || w.c || w.e ? ['p','c','e'].map(k => w[k]).filter(Boolean) : (w.ex || []);
+  return `<span class="wu-icons">${ids.map(id => { const x = wuEx(id); if (!x) return ''; return x.img ? `<img src="${esc(x.img)}" alt="${esc(x.n)}" title="${esc(x.n)}">` : `<span title="${esc(x.n)}">${x.ico}</span>`; }).join('')}${w.ok ? '<span class="wu-ok">✓</span>' : ''}</span>`;
+}
+/* observateur d'un exercice : celui qui a saisi, sinon l'observateur habituel de l'élève dans la leçon */
+function observerOf(n, sid, E){
+  if (E?.by) return E.by;
+  const r = res(n, sid), cnt = {};
+  (r?.ex || []).forEach(x => { if (x.by) cnt[x.by] = (cnt[x.by] || 0) + 1; });
+  const best = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]; if (best) return best[0];
+  const p = Object.entries(S.pairs || {}).find(([o, s]) => s === sid); return p ? p[0] : null;
+}
+/* points d'observation attendus pour un exercice terminé : piliers (tous les critères) + Borg */
+function obsUnits(n, E){
+  const L = lesson(n), P = lessonPils(n);
+  let idx = [];
+  if (E.k === 'max') { if (E.v > 0) idx = [0]; }
+  else if (vals(E.sets).length) idx = L.suivi === 's' ? (E.sets || []).map((v, i) => v != null ? i : null).filter(i => i != null) : [0];
+  let pe = 0, pm = 0, be = 0, bm = 0;
+  idx.forEach(i => { P.forEach(p => { pe++; const oc = E.oc?.[p.id]?.[i]; const full = oc ? p.cr.every((_, c) => oc[c] != null) : E.ob?.[p.id]?.[i] != null; if (!full) pm++; });
+    be++; if (E.bg?.[i] == null) bm++; });
+  return { pe, pm, be, bm };
+}
+function obsMissing(n, ob){
+  let given = 0, miss = 0;
+  Object.entries(S.results[n] || {}).forEach(([sid, r]) => (r.ex || []).forEach(E => { if (observerOf(n, sid, E) !== ob) return; const u = obsUnits(n, E); given += u.pe - u.pm + u.be - u.bm; miss += u.pm + u.bm; }));
+  return { given, miss };
+}
+/* ---------------------------------------------------------------------
+   Carnet d'entraînement /4 (élève observé + observateur, responsables des saisies)
+   Barème par leçon :
+     Échauffement 0,5   = 0,25 exercices choisis + 0,25 « échauffement fait » coché
+     Séance complète 1  = exercices prévus par le mobile saisis (prise de max : au moins un max ; coach : programme + fiche écrite)
+     Répétitions 1      = séries saisies / séries prévues des exercices commencés
+     Piliers 1          = critères des piliers renseignés / attendus (exercices terminés)
+     Ressenti (Borg) 0,5 = Borg renseigné / attendu
+   Note arrondie au quart de point. Leçon Hippopogramme, absence et dispense : non comptées.
+   --------------------------------------------------------------------- */
+const CARNET_BAREME = [['Échauffement', 0.5, '0,25 pour les exercices choisis + 0,25 pour « échauffement fait »'], ['Séance complète', 1, 'tous les exercices prévus par le mobile sont saisis (prise de max : au moins un max ; coach : programme + fiche écrite)'],
+  ['Répétitions', 1, 'les répétitions de chaque série sont saisies'], ['Piliers', 1, 'tous les critères des piliers sont renseignés pour chaque exercice terminé'], ['Ressenti (Borg)', 0.5, 'le ressenti est noté pour chaque exercice terminé']];
+const q25 = v => Math.round(v * 4) / 4;
+function carnetLesson(n, sid){
+  const th = thOf(n), at = attOf(n, sid); if (th === 'hippo' || at === 'abs' || at === 'disp') return null;
+  const r = res(n, sid) || { ex:[] }, ex = r.ex || [], d = {};
+  const W = th === 'coach' ? { t: r.wu?.t || 'circuit', nb: lesson(n).wu.nb || 6 } : lesson(n).wu;
+  if (!W || W.t === 'none') d.wu = 0.5;
+  else { const w = r.wu || {}, nbC = W.t === '3x3' ? ['p','c','e'].filter(k => w[k]).length / 3 : Math.min(1, (w.ex || []).length / (W.nb || 6)); d.wu = 0.25 * nbC + (w.ok ? 0.25 : 0); }
+  const M = MOB[th === 'coach' ? r.coach?.mob : mobOf(n, sid)];
+  if (isMaxTheme(th)) d.se = ex.some(E => E.k === 'max' && E.v > 0) ? 1 : 0;
+  else if (th === 'coach') { const C = r.coach || {}; d.se = 0.5 * Math.min(1, ex.filter(E => E.k === 'coach').length / 3) + 0.5 * ['comp','trav','mob','cons'].filter(k => C[k]).length / 4; }
+  else d.se = M ? Math.min(1, ex.filter(E => E.k === 'th' || E.k === 'free').length / M.nbEx) : 0;
+  let se = 0, sd = 0; ex.forEach(E => { if (E.k === 'max') { se++; if (E.v > 0) sd++; return; } const t = target(n, sid, E); if (!t || !t.s) return; se += t.s; sd += Math.min(t.s, vals(E.sets).length); });
+  d.re = se ? sd / se : 0;
+  let pe = 0, pm = 0, be = 0, bm = 0; ex.forEach(E => { const u = obsUnits(n, E); pe += u.pe; pm += u.pm; be += u.be; bm += u.bm; });
+  d.pi = lessonPils(n).length ? (pe ? (pe - pm) / pe : 0) : 1;
+  d.bo = be ? (be - bm) / be : 0;
+  const tot = d.wu + d.se + d.re + d.pi * 1 + d.bo * 0.5;
+  return { v: q25(tot), d };
+}
+function carnetNote(n, sid){ const l = []; for (let k = 1; k <= n; k++) { const c = carnetLesson(k, sid); if (c) l.push(c.v); } return l.length ? q25(avg(l)) : null; }
+const carnetTip = c => !c ? '' : `Échauffement ${fmt(c.d.wu)}/0,5 · Séance ${fmt(Math.round(c.d.se * 100) / 100)}/1 · Répétitions ${fmt(Math.round(c.d.re * 100) / 100)}/1 · Piliers ${fmt(Math.round(c.d.pi * 100) / 100)}/1 · Borg ${fmt(Math.round(c.d.bo * 50) / 100)}/0,5`;
+/* ---------------------------------------------------------------------
+   Note d'observateur /4 (évaluation intermédiaire) : écart entre la note de l'observateur et celle de l'enseignant, pilier par pilier
+   écart ≤ 0,5 → 4/4 · ≤ 1 → 3,5/4 · ≤ 1,5 → 3/4 … (−0,5 par demi-point d'écart supplémentaire)
+   --------------------------------------------------------------------- */
+const obsPts = diff => Math.max(0, 4 - 0.5 * Math.max(0, Math.ceil((diff - 0.5) / 0.5 - 1e-9)));
+function observedBy(n, ob){ return Object.keys(S.results[n] || {}).filter(sid => sid !== ob && (res(n, sid)?.ex || []).some(E => observerOf(n, sid, E) === ob)); }
+function observerNote(n, ob){
+  const L = lesson(n), rows = [];
+  observedBy(n, ob).forEach(sid => { const e = L.ev[sid] || {};
+    evalPils(n, sid).forEach(pid => { if (e[pid] == null) return;
+      const v = avg((res(n, sid)?.ex || []).filter(E => observerOf(n, sid, E) === ob).flatMap(E => vals(E.ob?.[pid]))); if (v == null) return;
+      const diff = Math.abs(v - e[pid]); rows.push({ sid, pid, o: Math.round(v * 10) / 10, t: e[pid], diff, pts: obsPts(diff) }); }); });
+  return rows.length ? { v: q25(avg(rows.map(x => x.pts))), rows } : null;
 }
 async function readSheetRows(file){
   if (!window.XLSX) throw new Error('Bibliothèque Excel non chargée');
@@ -1916,7 +2045,7 @@ function buildSeance(n){
   return { k:'seance', v:1, cid:S.id, cn:className(), pin:ROOT.pin, nbL:S.settings.nbLessons, cur:n, ng:nbGroups(), gc:S.settings.groupColors.slice(0, nbGroups()), off:ROOT.mOff,
     L:{ th:L.th, pil:lessonPils(n), suivi:L.suivi, wu:L.wu, hs:L.hs },
     st: list.map(s => [s.id, nameOf(s.id), grpOf(s.id, n), attOf(n, s.id) || 0, zoneMask(L.z[s.id] || []), nz(L.wb[s.id]?.fo), nz(L.wb[s.id]?.mo), L.role[s.id] || 0]),
-    mx, hist, pj, roles, pr: { ...(S.pairs || {}), ...pairsFromResults() } };
+    mp: ROOT.mob || null, mx, hist, pj, roles, pr: { ...(S.pairs || {}), ...pairsFromResults() } };
 }
 function targetClass(cid, name, create){
   if (cid && ROOT.classes[cid]) return ROOT.classes[cid];
@@ -1939,6 +2068,7 @@ function applySeance(p){
     if (at) L.att[id] = at; const z = maskZones(zm); if (z.length) L.z[id] = z;
     if (fo || mo) L.wb[id] = { fo: fo || null, mo: mo || null }; if (ro) L.role[id] = ro; });
   S.mx = {}; Object.entries(p.mx || {}).forEach(([sid, ms]) => { S.mx[sid] = {}; Object.entries(ms).forEach(([m, arr]) => { S.mx[sid][m] = arr.map(x => ({ v:x[0], n:x[1], mode:x[2] })); }); });
+  ROOT.mob = p.mp || null; applyMobParams(ROOT.mob);
   S.hist = p.hist || {}; S.pairs = { ...(S.pairs || {}), ...(p.pr || {}) }; delete S.curObs;
   Object.entries(p.pj || {}).forEach(([sid, P]) => { const loc = S.projects[sid]; if (!(loc && loc.d === S.deviceId && (loc.ts || 0) > (P.ts || 0))) S.projects[sid] = { ...P, d:'prof' }; });
   ROOT.seance = { cid:S.id, n:p.cur, at:now() };
@@ -2099,7 +2229,8 @@ function makeDemoFull(){
       for (let i = 0; i < nb; i++) { const base = cl(Math.round((P[sid].sk + (n / 12) * 3) / 2), 0, 5);
         const row = pl.cr.map(() => bin ? (Math.random() < base / 5 ? 1 : 0) : cl(base + R(-1, 1), 0, 5));
         E.oc[p][i] = row; E.ob[p][i] = critNote(row, bin); E.fq[p][i] = bin ? null : Math.round(avg(row)); } });
-    E.bg = Array.from({ length: nb }, (_, i) => cl(R(4, 7) + Math.round(i * 3 / nb), 1, 10)); E.by = P[sid].part; };
+    E.bg = Array.from({ length: nb }, (_, i) => Math.random() < .08 ? null : cl(R(4, 7) + Math.round(i * 3 / nb), 1, 10));
+    if (Math.random() < .05) { const p0 = Object.keys(E.ob)[0]; if (p0) { E.ob[p0][0] = null; if (E.oc[p0]) E.oc[p0][0] = null; } } E.by = P[sid].part; };
   const addMax = (n, sid, r, m) => { const tm = trueMax(sid, m, n); if (tm == null || blockOf(n, sid, m)) return;
     let E; if (isPdc(m)) E = { id:rnd(5), k:'max', m, mode:'reps', r: Math.max(1, tm + R(-1, 1)), sets:[] };
     else if (Math.random() < .35) E = { id:rnd(5), k:'max', m, mode:'1rm', kg: r05(tm), r:1, sets:[] };
@@ -2200,9 +2331,9 @@ function exportXlsx(){
       r?.wu ? WU_TYPES[r.wu.t] || '' : '', wuTxt(r?.wu), r?.wu?.ok ? 'oui' : '']); } });
   add(ap, 'Appel & échauffement');
   /* Évaluations */
-  if (evL.length) { const ev = [['Nom','Prénom','Leçon','Évaluation', ...piliers().map(p => p.n), 'Note /10']];
+  if (evL.length) { const ev = [['Nom','Prénom','Leçon','Évaluation', ...piliers().map(p => p.n), 'Note /10', 'Carnet d\'entraînement /4', 'Note d\'observateur /4']];
     evL.forEach(n => list.forEach(s => { const e = lesson(n).ev[s.id] || {}, ids = evalPils(n, s.id);
-      ev.push([...id2(s), n, themeName(thOf(n)), ...piliers().map(p => ids.includes(p.id) ? e[p.id] ?? '' : ''), attOf(n, s.id) === 'abs' ? 'ABS' : attOf(n, s.id) === 'disp' ? 'DISP' : evalNote(n, s.id) ?? '']); }));
+      ev.push([...id2(s), n, themeName(thOf(n)), ...piliers().map(p => ids.includes(p.id) ? e[p.id] ?? '' : ''), attOf(n, s.id) === 'abs' ? 'ABS' : attOf(n, s.id) === 'disp' ? 'DISP' : evalNote(n, s.id) ?? '', thOf(n) === 'evi' ? carnetNote(n, s.id) ?? '' : '', thOf(n) === 'evi' ? observerNote(n, s.id)?.v ?? '' : '']); }));
     add(ev, 'Évaluations'); }
   /* Coach d'un jour */
   if (coL.length) { const co = [['Nom','Prénom','Leçon','Rôle','Ce qu\'il comprend','Doit travailler sur','Mobile','Échauffement','Exercices','Conseils','Note /10','Commentaire']];
@@ -2298,6 +2429,7 @@ const A = {
   critToggle: d => { const L = lesson(+d.n), p = pilier(d.p); let k = L.crit[d.p]; if (!k || !k.length) k = p.cr.map((_, i) => i);
     const i = +d.i; k = k.includes(i) ? k.filter(x => x !== i) : [...k, i].sort();
     if (!k.length) return toast('Gardez au moins un critère'); L.crit[d.p] = k.length === p.cr.length ? [] : k; save(); render(); },
+  mobReset: async () => { if (!(await confirmBox('Revenir aux valeurs proposées ?', 'Séries, répétitions, récupérations et pourcentages des 5 mobiles sont remis par défaut.', 'Rétablir', true))) return; ROOT.mob = null; applyMobParams(null); save(); render(); },
   pilReset: async () => { if (!(await confirmBox('Revenir aux observables proposés ?', 'Les noms et observables modifiés seront remplacés.', 'Rétablir', true))) return;
     ROOT.piliers = DEFAULT_PILIERS.map(p => ({ ...p, cr:[...p.cr] })); save(); render(); },
   mOff: d => { ROOT.mOff = ROOT.mOff.includes(d.id) ? ROOT.mOff.filter(x => x !== d.id) : [...ROOT.mOff, d.id]; save(); rerender(); },
@@ -2365,6 +2497,8 @@ document.addEventListener('change', e => {
   if (f === 'wuT') { const L = lesson(d.n); L.wu = { t:t.value, nb:L.wu.nb || 6, dur:L.wu.dur || 30 }; save(); render(); }
   if (f === 'wuNb') { lesson(d.n).wu.nb = +t.value; save(); }
   if (f === 'wuDur') { lesson(d.n).wu.dur = +t.value; save(); }
+  if (f === 'mobP') { const v = Math.round(+t.value); if (!v || v < 1) return toast('Valeur invalide');
+    ROOT.mob = ROOT.mob || {}; ROOT.mob[d.m] = { ...(ROOT.mob[d.m] || {}), [d.k]: v }; applyMobParams(ROOT.mob); save(); rerender(); toast('✓ ' + MOB[d.m].n); return; }
   if (f === 'pilName') { const p = pilier(d.p); if (p) { p.n = t.value.trim() || p.n; save(); } }
   if (f === 'pilCr') { const p = pilier(d.p); if (p) { p.cr[+d.i] = t.value.trim(); save(); } }
   if (f === 'roleName') { const r = role(d.r); if (r) { r.n = t.value.trim() || r.n; save(); } }
