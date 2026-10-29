@@ -947,3 +947,104 @@ input[type=range].unset{opacity:.45}
 .borg-l b{display:inline-block;min-width:26px}
 .borg-l.on{background:var(--bc);color:var(--bf);border-color:#0A1633}
 .big-next{min-height:64px;font-size:20px}
+
+/* =====================================================================
+   v1.4.0 — format très compact : boutons et contrôles plus petits partout
+   ===================================================================== */
+body{font-size:16px}
+h2{font-size:20px} h3{font-size:17px}
+main{padding:10px}
+.card{padding:10px 12px;margin-bottom:10px}
+.btn{min-height:38px;padding:5px 12px;font-size:15px;border-width:2px;border-radius:10px;gap:6px}
+.btn.small{min-height:30px;padding:2px 9px;font-size:13px}
+#tb-right .btn{min-height:34px;padding:3px 10px;font-size:14px}
+#topbar{padding-top:calc(5px + env(safe-area-inset-top,0px));padding-bottom:5px}
+.tb-home{width:40px;height:40px}
+#tb-main{font-size:18px} #tb-sub{font-size:13px}
+.home{gap:12px}
+.home-logo{width:min(200px,46vw)}
+.home-lesson{padding:8px 14px}
+.home-lesson .big{font-size:22px}
+.home-btn{min-height:92px;font-size:18px;border-radius:14px;gap:4px}
+.home-btn .ico{font-size:30px}
+.home-btn small{font-size:12px}
+.pm-btn{min-height:96px!important;font-size:18px!important;padding:8px!important}
+.pm-btn .ico{font-size:28px!important}
+.pm-btn small{font-size:12px!important}
+.tabs{gap:4px;margin-bottom:10px}
+.tab{min-height:36px;padding:3px 10px;font-size:14px;border-width:2px;border-radius:10px}
+.lp{width:46px;height:46px;font-size:18px;border-width:2px;border-radius:10px}
+.lp small{font-size:12px}
+.chip{min-height:34px;font-size:14px;border-width:2px}
+.stepper button{width:38px;height:38px;font-size:18px;border-width:2px}
+.stepper .val{font-size:18px;min-width:44px}
+input[type=text],input[type=number],input[type=password],textarea,select{min-height:38px;padding:5px 9px;font-size:15px;border-width:2px;border-radius:10px}
+textarea{min-height:70px}
+.tile{min-height:70px;padding:8px 8px 8px 18px;border-width:2px;gap:2px}
+.tile .name{font-size:18px}
+.tile .target{font-size:14px}
+.tile .meta{font-size:12px}
+.tile.sug{min-height:90px} .tile.sug .name{font-size:22px}
+.tiles{gap:8px}
+.att-tile{padding:6px 8px 6px 16px;border-width:2px}
+.att-tile .name{font-size:17px;margin-bottom:4px}
+.att-tile .btn{min-height:32px;font-size:13px}
+.grp-btn{min-height:70px!important;font-size:17px!important}
+.entry-name{padding:6px 10px!important}
+.entry-name .who{font-size:22px!important}
+.ex-card{padding:8px 10px;border-width:2px;margin-bottom:8px}
+.ex-n{font-size:18px} .ex-tgt{font-size:14px}
+.m-img{width:46px;height:46px}
+.mpick{padding:5px;border-width:2px;border-radius:10px}
+.mpick .m-img{width:68px;height:68px}
+.mpick b{font-size:14px} .mpick small{font-size:12px}
+.mpick-grid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px}
+.big-add{min-height:48px;font-size:16px}
+.big-add small{font-size:11px}
+.big-next{min-height:46px;font-size:16px}
+.add-bar{gap:6px;margin:6px 0}
+.kg-step button{min-width:38px;height:38px;font-size:16px;border-width:2px}
+.kg-step.sm button{min-width:32px;height:32px;font-size:15px}
+.kg-step.sm .kg-val{min-width:44px;height:32px;font-size:16px}
+.set-row{padding:3px 8px;gap:6px;border-radius:10px}
+.set-rows{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin:6px 0}
+.num-in input{width:90px;min-height:40px;font-size:20px}
+.cf .num-in input{width:76px;font-size:17px;min-height:36px}
+.max-res b{font-size:22px}
+.load-box{padding:4px 10px;margin:5px 0} .load-box b{font-size:20px}
+.ry-box{background:#EEF3FF;border:2px solid #9BB4E8;border-radius:10px;padding:4px 10px;margin:5px 0;font-weight:700;font-size:15px}
+.seg button{min-height:34px;font-size:13px}
+.fq{min-height:30px;font-size:12px;border-width:2px;border-radius:8px;padding:1px}
+.wu-chip{min-height:38px;padding:3px 6px;font-size:13px;border-width:2px;border-radius:10px}
+.wu-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:5px}
+.wu-ico{font-size:18px} .wu-img{width:26px;height:26px}
+.mob-btn{padding:6px 8px;border-width:2px;border-radius:10px} .mob-btn b{font-size:14px} .mob-btn small{font-size:12px}
+.pchip{min-height:30px;font-size:13px;padding:2px 9px;border-width:2px}
+.well-sec,.wu-sec,.mob-sec,.pil-sec,.coach-sec{padding:8px 10px;border-width:2px;margin-bottom:8px}
+.pass-chip{min-width:52px!important;padding:2px 6px!important}
+.dial{width:160px;height:160px}
+.dial-card{padding:6px;border-width:2px}
+.dial-card h3{font-size:15px}
+.pil-row{grid-template-columns:200px minmax(0,1fr);gap:8px;margin-top:6px}
+.borg-l{padding:1px 8px;font-size:13px}
+.qr-nums button{min-width:34px;min-height:34px}
+.pin-pad button{min-height:56px!important;font-size:24px!important}
+.sc10-r button{min-height:40px}
+.ev-v{height:32px;width:40px;font-size:17px}
+.ev-note{font-size:22px}
+/* Piliers : critères Jamais → Toujours */
+.crit-card{border:2px solid #8A2BE2;border-radius:12px;padding:6px 10px;margin-top:6px;background:#FBF8FF}
+.crit-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.crit-head b{font-size:16px}
+.crit-note{margin-left:auto;font-size:20px;font-weight:900;border:2px solid var(--line);border-radius:10px;padding:0 8px;color:var(--grey)}
+.crit-note small{font-size:12px}
+.crit-line{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;align-items:center;padding:3px 0;border-top:1px dashed #D8CCEF}
+.crit-t{font-weight:700;font-size:14px}
+.crit-opts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
+.crit-opts.bin{grid-template-columns:repeat(2,minmax(0,1fr));max-width:220px}
+.crit-tip{margin-top:4px;font-weight:700;font-size:14px;background:#FFF6D6;border-radius:8px;padding:4px 8px}
+.succ{font-size:13px;padding:2px 10px}
+@media (max-width:700px){ .crit-line{grid-template-columns:1fr} .crit-opts{grid-template-columns:repeat(3,minmax(0,1fr))} .pil-row{grid-template-columns:1fr} }
+/* v1.4.1 — échelle de Borg cliquable */
+button.borg-l{display:block;width:100%;text-align:left;font:inherit;font-size:14px;font-weight:700;color:#0A1633;cursor:pointer;min-height:30px}
+button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
