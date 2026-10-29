@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -1460,11 +1460,11 @@ function maxTable(sid, n){
         <td>${h.length > 1 ? `<b class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${isPdc(id) ? Math.abs(Math.round(d)) + ' rép.' : fmtKg(Math.abs(d))}</b>` : '—'}</td></tr>`; }).join('')}</table></div>`;
 }
 function exLine(n, sid, E){
-  if (E.k === 'max') return `🏋️ <b>${esc(mName(E.m))}</b> · prise de max ${E.mode === 'brz' ? `(${fmtKg(E.kg)} × ${E.r}, Brzycki)` : E.mode === '1rm' ? '(1RM)' : '(répétitions)'} : <b>${fmtMax(E.m, E.v)}</b>`;
+  if (E.k === 'max') return `🏋️ <b>${esc(mName(E.m))}</b> · prise de max ${E.mode === 'brz' ? `(${fmtKg(E.kg)} × ${E.r}, Brzycki)` : E.mode === '1rm' ? '(1RM)' : '(répétitions)'} : <b>${fmtMax(E.m, E.v)}</b>${maxGain(n, sid, E)}`;
   const t = target(n, sid, E), nm = E.m ? mName(E.m) : (E.nm || 'Exercice adapté');
   const pils = Object.keys(E.ob || {}).map(id => { const v = obMean(E, id); if (v == null) return ''; const f = vals(E.fq?.[id]), k = noteSucc(v);
     return `<span class="pil-mini" style="background:${SUCC[k].c};color:${SUCC[k].f}" title="${esc(pilier(id)?.n || '')}${f.length ? ' · ' + FREQ[Math.round(avg(f))] : ''}">${pilier(id)?.ico || '👀'} ${fmt(v)}</span>`; }).filter(Boolean).join(' ') + (E.by && E.by !== 'x' && student(E.by) ? ` <span class="muted">(obs. ${esc(nameOf(E.by))})</span>` : '');
-  return `${E.k === 'free' ? '✏️' : E.k === 'coach' ? '🎭' : '💪'} <b>${esc(nm)}</b> · ${esc(tgtTxt(t))} · réalisé : ${vals(E.sets).join(' / ') || '—'}${pils ? ' · ' + pils : ''}${E.it?.x ? ` · ⏱️ 6 min ${esc(wuEx(E.it.x)?.n || '')}${E.it.ok ? ' ✓' : ''}` : ''}`;
+  return `${E.k === 'free' ? '✏️' : E.k === 'coach' ? '🎭' : '💪'} <b>${esc(nm)}</b> · ${esc(tgtTxt(t))} ${repsDot(n, sid, E)}${pils ? ' · ' + pils : ''}${E.it?.x ? ` · ⏱️ 6 min ${esc(wuEx(E.it.x)?.n || '')}${E.it.ok ? ' ✓' : ''}` : ''}`;
 }
 const wuTxt = w => !w ? '' : w.t === '3x3' || w.p || w.c || w.e ? ['p','c','e'].map(k => w[k] ? wuEx(w[k])?.n : null).filter(Boolean).join(' · ') : (w.ex || []).map(id => wuEx(id)?.n).filter(Boolean).join(', ');
 function viewSuiviDetail(sid){
@@ -1474,9 +1474,9 @@ function viewSuiviDetail(sid){
   for (let n = 1; n <= N; n++) { const x = lessonSummary(n, sid); if (!x) continue; const T = THEMES[x.th] || {};
     rows += `<tr><td><b>L${n}</b></td><td>${T.ico || ''} ${esc(T.n || '')}${x.mob && (THEMES[x.th]?.mobs || []).length > 1 ? `<div class="muted" style="font-size:13px">${esc(MOB[x.mob]?.n || '')}</div>` : ''}</td>
       <td>${x.at ? `<span class="tag ${ATT[x.at].cls}">${esc(ATT[x.at].n)}</span>` : ''}</td><td class="c">${chipB(x.bg)}</td>
-      <td class="c">${x.ex || '—'}</td><td class="c">${x.reps || '—'}</td><td class="c">${chipV(x.pil)}</td><td class="c">${chipV(x.og)}</td></tr>`;
+      <td class="c">${x.ex || '—'}</td><td class="c">${chipV(x.pil)}</td><td class="c">${chipV(x.og)}</td></tr>`;
     if (x.r && isProfRole() || x.r && UI.view === 'suiviDetail') { const det = (x.r.ex || []).map(E => `<div>${exLine(n, sid, E)}</div>`).join('') + (x.r.hip || []).map(h => `<div>${hipLine(h)}</div>`).join('') + (wuTxt(x.wu) ? `<div>🔥 Échauffement : ${esc(wuTxt(x.wu))}</div>` : '');
-      if (det) rows += `<tr class="det"><td></td><td colspan="7">${det}</td></tr>`; } }
+      if (det) rows += `<tr class="det"><td></td><td colspan="6">${det}</td></tr>`; } }
   const notes = evalLessons().map(n => ({ n, v: evalNote(n, sid) })).filter(x => x.v != null);
   const coach = []; for (let n = 1; n <= N; n++) if (thOf(n) === 'coach' && lesson(n).cn[sid]?.v) coach.push({ n, v: lesson(n).cn[sid].v });
   const P = S.projects[sid];
@@ -1484,7 +1484,7 @@ function viewSuiviDetail(sid){
       ${P ? `<div style="margin-top:6px;font-weight:800">📋 Projet : ${esc(MOB[P.mob]?.n || '')} · ${(P.ms || []).map(mName).join(', ')}</div>` : ''}
       ${notes.length || coach.length ? `<div class="row" style="margin-top:8px">${notes.map(x => `<span class="note-chip">${THEMES[thOf(x.n)].ico} L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}${coach.map(x => `<span class="note-chip">🎭 L${x.n} : <b>${fmt(x.v)}/10</b></span>`).join('')}</div>` : ''}</div>
     <div class="card"><h2>🏋️ Mes max</h2>${maxTable(sid)}</div>
-    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">🥵 Borg</th><th class="c">Exercices</th><th class="c">Rép.</th><th class="c">👀 Piliers reçus</th><th class="c">📊 Notes données</th></tr>${rows || '<tr><td colspan="8">Pas encore de séance.</td></tr>'}</table></div></div>`;
+    <div class="card"><h2>📅 Mon cycle</h2><div class="pj-table-wrap"><table class="pj-table"><tr><th>Leçon</th><th>Thème</th><th>Statut</th><th class="c">🥵 Borg</th><th class="c">Exercices</th><th class="c">👀 Note des piliers</th><th class="c">📊 Notes données</th></tr>${rows || '<tr><td colspan="7">Pas encore de séance.</td></tr>'}</table></div></div>`;
 }
 
 function profMaxes(){
@@ -1499,7 +1499,7 @@ function profBilanL(){
   const N = S.settings.nbLessons, n = UI.bilN && UI.bilN <= N ? UI.bilN : curLesson(), P = lessonPils(n);
   return `<div class="card strong compact"><h2>🔎 Bilan de la leçon</h2><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(k=>`<button class="lp ${k===n?'on':''}" data-action="bilN" data-n="${k}"><span>${k}</span><small>${THEMES[thOf(k)].ico}</small></button>`).join('')}</div>
       <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(n))}${P.length ? ' · ' + P.map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div>
-      <div class="legend-dots">${[['#0B4F1C','toutes les répétitions'],['#86DC96','≥ 90 %'],['#FFD000','≥ 75 %'],['#F07000','≥ 50 %'],['#D0161B','moins de 50 %'],['#C9D1E0','non saisi']].map(([c, t]) => `<span>${dotC(c)} ${t}</span>`).join('')}</div></div>
+      <div class="legend-dots">${[['#0B4F1C','toutes les répétitions'],['#86DC96','1 ou 2 manquées'],['#FFD000','3 ou 4 manquées'],['#F07000','5 à 10 manquées'],['#D0161B','plus de 10 manquées'],['#C9D1E0','non saisi']].map(([c, t]) => `<span>${dotC(c)} ${t}</span>`).join('')}</div></div>
     <div class="card"><div class="pj-table-wrap"><table class="pj-table bil-tab"><tr><th>Élève</th><th class="c">🥵</th><th>🔥</th><th>Séance</th>${P.map(p => `<th class="c" title="${esc(p.n)}">${p.ico}</th>`).join('')}<th class="c" title="Notes données en tant qu'observateur">📊 Notes<br>données</th><th class="c" title="Carnet d'entraînement">📒 /4</th></tr>
     ${sortedStudents().map(s => { const at = attOf(n, s.id), r = res(n, s.id), pm = pilMeans(n, s.id), z = zonesOf(n, s.id), om = obsMissing(n, s.id), og = obsGiven(n, s.id), cl = carnetLesson(n, s.id);
       return `<tr><td><b>${esc(nameOf(s.id))}</b>${at ? ` <span class="tag ${ATT[at].cls}">${esc(ATT[at].n)}</span>` : ''}${z.length ? `<div class="muted" style="font-size:12px">🩹 ${esc(z.map(zoneName).join(', '))}</div>` : ''}</td>
@@ -1585,6 +1585,19 @@ function printFiches(ids){
 /* =====================================================================
    Bilan condensé, notes oubliées, carnet d'entraînement /4, note d'observateur /4
    ===================================================================== */
+/* couleur selon les répétitions manquantes sur l'ensemble de l'exercice */
+const missCol = m => m == null ? '#C9D1E0' : m <= 0 ? '#0B4F1C' : m <= 2 ? '#86DC96' : m <= 4 ? '#FFD000' : m <= 10 ? '#F07000' : '#D0161B';
+function repsDot(n, sid, E){ const t = target(n, sid, E), tot = t && t.s ? t.s * t.r : null;
+  if (!vals(E.sets).length || !tot) return dotC('#C9D1E0', 'non saisi');
+  const miss = Math.max(0, tot - repsDone(E)); return dotC(missCol(miss), miss ? `${miss} répétition${miss > 1 ? 's' : ''} manquée${miss > 1 ? 's' : ''}` : 'toutes les répétitions réussies'); }
+/* amélioration d'un max par rapport au max précédent */
+function maxGain(n, sid, E){
+  if (E.k !== 'max' || !(E.v > 0)) return '';
+  const prev = maxHist(sid, E.m).filter(x => x.n < n).pop();
+  if (!prev) return ' <span class="mx-new">1er max</span>';
+  const d = E.v - prev.v, u = isPdc(E.m) ? `${Math.abs(Math.round(d))} rép.` : fmtKg(Math.abs(d));
+  return d > 0 ? ` <span class="mx-up" title="Max précédent : ${fmtMax(E.m, prev.v)} (L${prev.n})">🚀 max amélioré +${u}</span>` : d < 0 ? ` <span class="mx-down" title="Max précédent : ${fmtMax(E.m, prev.v)} (L${prev.n})">▼ −${u}</span>` : ' <span class="muted">= max précédent</span>';
+}
 const ratioCol = q => q == null ? '#C9D1E0' : q >= 1 ? '#0B4F1C' : q >= .9 ? '#86DC96' : q >= .75 ? '#FFD000' : q >= .5 ? '#F07000' : '#D0161B';
 const dotC = (c, t) => `<span class="cdot" style="background:${c}" title="${esc(t || '')}"></span>`;
 /* une ligne par exercice : pastille de réussite des répétitions, charge, répétitions faites / prévues, piliers, Borg, observateur */
@@ -1594,10 +1607,10 @@ function exShort(n, sid, E){
   const bg = avg(borgOf(E)), bgs = bg != null ? ' ' + chipB(bg) : '';
   const pils = Object.keys(E.ob || {}).map(id => { const v = obMean(E, id); if (v == null) return ''; const k = noteSucc(v);
     return `<span class="pil-mini" style="background:${SUCC[k].c};color:${SUCC[k].f}" title="${esc(pilier(id)?.n || '')}">${pilier(id)?.ico || '👀'} ${fmt(v)}</span>`; }).filter(Boolean).join(' ');
-  if (E.k === 'max') return `<div class="exs">${dotC(E.v ? '#0062C4' : '#C9D1E0', 'prise de max')}🏋️ <b>${esc(nm)}</b> · max <b>${fmtMax(E.m, E.v)}</b>${E.mode === 'brz' && E.kg ? ` <span class="muted">(${fmt(E.kg)} kg × ${E.r})</span>` : ''} ${pils}${bgs}${by}</div>`;
+  if (E.k === 'max') return `<div class="exs">${dotC(E.v ? '#0062C4' : '#C9D1E0', 'prise de max')}🏋️ <b>${esc(nm)}</b> · max <b>${fmtMax(E.m, E.v)}</b>${E.mode === 'brz' && E.kg ? ` <span class="muted">(${fmt(E.kg)} kg × ${E.r})</span>` : ''}${maxGain(n, sid, E)} ${pils}${bgs}${by}</div>`;
   const t = target(n, sid, E), tot = t && t.s ? t.s * t.r : null, done = repsDone(E), q = tot ? done / tot : null;
   const load = t?.zone ? t.zone.t.replace('entre ', '').replace(' et ', '–') : t?.kg ? fmtKg(t.kg) : t?.pdc ? 'PDC' : '';
-  return `<div class="exs">${dotC(vals(E.sets).length ? ratioCol(q) : '#C9D1E0', tot ? `${done} / ${tot} répétitions` : '')}<b>${esc(nm)}</b>${load ? ` · ${esc(load)}` : ''} · <b>${done}</b>${tot ? `/${tot}` : ''} reps ${pils}${bgs}${E.it?.ok ? ` <span title="6 min ${esc(wuEx(E.it.x)?.n || '')}">⏱️</span>` : ''}${by}</div>`;
+  return `<div class="exs">${repsDot(n, sid, E)}<b>${esc(nm)}</b>${load ? ` · ${esc(load)}` : ''} ${pils}${bgs}${E.it?.ok ? ` <span title="6 min ${esc(wuEx(E.it.x)?.n || '')}">⏱️</span>` : ''}${by}</div>`;
 }
 function wuIcons(w){
   if (!w) return '';

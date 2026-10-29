@@ -1057,7 +1057,7 @@ button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
 @media (max-width:640px){ .or-row{grid-template-columns:1fr} .or-row .or{text-align:center} }
 .mob-tab .num-in input{width:70px;font-size:16px;min-height:34px}
 .cdot{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(0,0,0,.25);vertical-align:-2px;margin-right:5px;flex:none}
-.exs{font-size:13px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px}
+.exs{font-size:13px;line-height:1.5}
 .exs .wv{padding:0 5px;font-size:12px}
 .wu-icons{display:inline-flex;flex-wrap:wrap;gap:2px;align-items:center;font-size:18px;max-width:150px}
 .wu-icons img{width:22px;height:22px;object-fit:contain}
@@ -1071,3 +1071,7 @@ button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
 .ev-extra span{font-weight:800;font-size:13px}
 .ev-extra small{font-size:11px}
 .bareme summary{cursor:pointer}
+/* v1.5.1 — progrès des max */
+.mx-up{color:#0B4F1C;font-weight:900;background:#E2F5E5;border-radius:6px;padding:0 5px}
+.mx-new{color:#0062C4;font-weight:800;font-size:12px}
+.mx-down{color:var(--red);font-weight:800}
