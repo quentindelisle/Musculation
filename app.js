@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.5.2';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -122,6 +122,7 @@ const DEFAULT_PILIERS = [
   { id:'comp', n:'Éviter les compensations', ico:'🎯', cr:['Pas d\'élan ni d\'à-coups', 'Le dos reste plaqué, pas de cambrure', 'Seuls les segments travaillés bougent'] },
   { id:'fati', n:'Repérer les signes de fatigue', ico:'🔋', cr:['Expiration sur les temps moteurs, pas d\'apnée', 'Perte de vitesse ou d\'amplitude repérée et annoncée', 'Charge allégée ou série arrêtée si la technique se dégrade'] },
   { id:'enco', n:'Encourager pour favoriser l\'engagement', ico:'📣', cr:['Compte les répétitions à voix haute', 'Encourage pendant les dernières répétitions', 'Donne un retour positif et un conseil après la série'], prof:true },
+  { id:'equi', n:'Garder l\'équilibre', ico:'⚖️', cr:['Appuis stables et répartis (pieds à plat, dos et bassin calés)', 'Bassin et épaules restent alignés, sans bascule d\'un côté', 'Mouvement symétrique : les deux côtés poussent ou tirent ensemble'] },
   { id:'secu', n:'Sécurité', ico:'🛡️', cr:['Charge et goupille vérifiées avant la série', 'Charge accompagnée jusqu\'au retour, jamais lâchée', 'Zone de travail dégagée, matériel rangé après usage'], secu:true },
 ];
 const PIL_V = 1;
@@ -194,6 +195,7 @@ function loadRoot(){
   if (!ROOT.pin) ROOT.pin = '0000';
   if (!ROOT.piliers || (ROOT.pilV || 0) < PIL_V) { ROOT.piliers = DEFAULT_PILIERS.map(p => ({ ...p, cr:[...p.cr] })); ROOT.pilV = PIL_V; }
   { const e = ROOT.piliers.find(p => p.id === 'enco'); if (e) e.prof = true; }
+  if (!ROOT.piliers.some(p => p.id === 'equi')) { const q = DEFAULT_PILIERS.find(p => p.id === 'equi'), i = ROOT.piliers.findIndex(p => p.id === 'secu'); ROOT.piliers.splice(i < 0 ? ROOT.piliers.length : i, 0, { ...q, cr:[...q.cr] }); }
   if (!ROOT.suiviE) { Object.values(ROOT.classes).forEach(c => Object.values(c.lessons || {}).forEach(L => { L.suivi = 'e'; })); ROOT.suiviE = true; }
   if (!ROOT.roles) ROOT.roles = DEFAULT_ROLES.map(r => ({ ...r }));
   if (!ROOT.mOff) ROOT.mOff = [];
