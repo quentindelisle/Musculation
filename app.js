@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.6.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -369,11 +369,14 @@ const attOf = (n, sid) => lesson(n).att[sid] || null;            // 'abs' | 'dis
 const present = (n, sid) => !['abs','disp'].includes(attOf(n, sid));
 const ATT = { abs:{ n:'Absent', cls:'abs' }, disp:{ n:'Inapte (dispensé)', cls:'disp' }, inap:{ n:'Inaptitude partielle', cls:'inapte' } };
 function res(n, sid){ return (S.results[n] && S.results[n][sid]) || null; }
+const REC_FIELDS = ['wu','mob','ef','z','coach','hip'];
 function setRes(n, sid, fn){
   S.results[n] = S.results[n] || {};
   const r = S.results[n][sid] || { ex:[] };
   r.ex = r.ex || [];
-  fn(r); r.ts = now(); r.d = S.deviceId;
+  const before = REC_FIELDS.map(k => JSON.stringify(r[k] ?? null));
+  fn(r); const t = now(); r.ts = t; r.d = S.deviceId;
+  r.fts = r.fts || {}; REC_FIELDS.forEach((k, i) => { if (JSON.stringify(r[k] ?? null) !== before[i]) r.fts[k] = t; });
   S.results[n][sid] = r; save();
 }
 /* zones d'inaptitude : déclarées à l'appel (prof) ou sur la tablette (élève) */
@@ -828,7 +831,7 @@ function addBar(n, sid, r){
   if (th === 'coach') b += `<button class="btn primary big-add" data-action="addEx" data-k="coach">➕ Exercice de mon programme</button>`;
   else if (mob) b += `<button class="btn primary big-add" data-action="addEx" data-k="th" ${rule.full ? 'disabled' : ''}>➕ Exercice du thème${rule.hint ? `<small>${esc(rule.hint)}</small>` : ''}</button>`;
   else if (T_needsMob(th)) b += `<div class="advice warn">Choisis d'abord ${th === 'pui' ? 'ta formule' : 'ton mobile'} ci-dessus.</div>`;
-  if (th !== 'hippo') b += `<button class="btn ${isMaxTheme(th) ? 'primary big-add' : 'orange'}" data-action="addEx" data-k="max">🏋️ Besoin de prendre un Max</button>`;
+  if (th !== 'hippo') b += `<button class="btn ${isMaxTheme(th) ? 'primary big-add' : 'orange'}" data-action="addEx" data-k="max">🏋️ ${isMaxTheme(th) ? 'Prendre un nouveau max' : 'Besoin de prendre un Max'}</button>`;
   if (inap) b += `<button class="btn" data-action="addEx" data-k="free">✏️ Exercice adapté (inaptitude)</button>`;
   return `<div class="add-bar">${b}</div>`;
 }
@@ -859,18 +862,17 @@ function exCard(n, sid, E, k){
 }
 /* Prise de max : 1RM / Brzycki / répétitions */
 function maxBody(n, sid, E){
-  const pdc = isPdc(E.m), modes = pdc ? ['reps'] : ['1rm','brz'];
+  const pdc = isPdc(E.m), onlyBrz = isMaxTheme(thOf(n)), modes = pdc ? ['reps'] : onlyBrz ? ['brz'] : ['1rm','brz'];
+  if (!modes.includes(E.mode)) E.mode = modes[modes.length - 1];
   const prev = maxHist(sid, E.m).filter(x => !(x.n === n && x.src !== 'prof')).pop();
-  let h = `<div class="max-body"><div class="seg max-seg">${modes.map(md => `<button class="${E.mode === md ? 'on norm' : ''}" data-action="maxMode" data-e="${E.id}" data-v="${md}">${esc(MAX_MODES[md])}</button>`).join('')}</div>`;
-  if (E.mode === '1rm') h += `<div class="kg-in"><span class="lbl">Charge la plus lourde soulevée 1 fois</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}</div>`;
-  if (E.mode === 'brz') h += `<div class="kg-in"><span class="lbl">Charge soulevée</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}<b class="x">×</b>${numIn('maxR', E, E.r, 'répétitions', 1, BRZ_MAX_R)}<span class="lbl">(2 à ${BRZ_MAX_R})</span></div>`;
-  if (E.mode === 'reps') h += `<div class="kg-in"><span class="lbl">Nombre de répétitions réalisées</span>${numIn('maxR', E, E.r, 'répétitions', 1, 150)}</div>`;
+  let h = `<div class="max-body">${modes.length > 1 ? `<div class="seg max-seg">${modes.map(md => `<button class="${E.mode === md ? 'on norm' : ''}" data-action="maxMode" data-e="${E.id}" data-v="${md}">${esc(MAX_MODES[md])}</button>`).join('')}</div>` : ''}`;
+  const calc = `<button class="btn primary" data-action="maxCalc" data-e="${E.id}">🧮 Calculer</button>`;
+  if (E.mode === '1rm') h += `<div class="kg-in"><span class="lbl">Charge la plus lourde soulevée 1 fois</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}${calc}</div>`;
+  if (E.mode === 'brz') h += `<div class="kg-in"><span class="lbl">Charge soulevée</span>${numIn('maxKg', E, E.kg, 'kg', 0.5, 400)}<b class="x">×</b>${numIn('maxR', E, E.r, 'répétitions', 1, BRZ_MAX_R)}<span class="lbl">(1 à ${BRZ_MAX_R})</span>${calc}</div>`;
+  if (E.mode === 'reps') h += `<div class="kg-in"><span class="lbl">Nombre de répétitions réalisées</span>${numIn('maxR', E, E.r, 'répétitions', 1, 150)}${calc}</div>`;
   const v = maxFromEntry(E);
   h += `<div class="max-res ${v ? 'on' : ''}"><div><span class="lbl">${E.mode === 'brz' ? 'Max estimé (Brzycki)' : 'Mon max'}</span><b>${v ? fmtMax(E.m, v) : '—'}</b></div>
     ${prev ? `<div><span class="lbl">Avant (L${prev.n})</span><b>${fmtMax(E.m, prev.v)}</b></div>${v ? `<div><span class="lbl">Évolution</span><b class="${v >= prev.v ? 'up' : 'down'}">${v >= prev.v ? '▲' : '▼'} ${pdc ? Math.round(v - prev.v) + ' rép.' : fmtKg(Math.abs(v - prev.v))}</b></div>` : ''}` : ''}</div>`;
-  if (E.mode === 'brz') h += `<div class="muted brz-note">1RM = charge ÷ (1,0278 − 0,0278 × répétitions)${E.kg && E.r ? ` = ${fmt(E.kg)} ÷ (1,0278 − 0,0278 × ${E.r})` : ''}. Plus il y a de répétitions, moins l'estimation est fiable : au-delà de 15, elle ne l'est plus.</div>`;
-  if (v && !pdc) h += `<div class="pct-row">${[50,60,70,75,80,90].map(p => `<span><small>${p} %</small>${kgZone(v * p / 100)?.t.replace('entre ', '') || '—'}</span>`).join('')}</div>`;
-  if (v && pdc) h += `<div class="pct-row">${[50,60,70,75,80,90].map(p => `<span><small>${p} %</small>${Math.max(1, Math.round(v * p / 100))} rép.</span>`).join('')}</div>`;
   h += `</div>` + (v ? pilDials(n, E, 0, 'Fin de la prise de max') + nextBtn(n, sid, E) : '');
   return h;
 }
@@ -1033,13 +1035,13 @@ function inapModal(){
   m.querySelector('[data-p="none"]').onclick = () => done([]);
   m.querySelector('[data-p="ok"]').onclick = () => done(sel);
 }
-function newE(k, extra){ return { id: rnd(5), k, sets:[], ob:{}, ts: now(), ...extra }; }
+function newE(k, extra){ const t = now(); return { id: rnd(6), k, sets:[], ob:{}, ts: t, t0: t, ...extra }; }
 function addExercise(k){
   const n = curLesson(), sid = UI.sid, r = res(n, sid) || { ex:[] }, th = thOf(n);
   const noCardio = m => m.k === 'cardio' ? 'cardio : échauffement' : null;
   if (k === 'free') { setRes(n, sid, r => r.ex.push(newE('free', { nm:'', s:3, r:10, rest:60 }))); return rerender(); }
   if (k === 'max') return pickMachine({ title:'🏋️ Prise de Max · choisis la machine', hint:'Choisis ensuite le type de prise de max : 1RM, formule de Brzycki ou nombre de répétitions (pompes, tractions, dips, abdos).', n, sid, extra: noCardio,
-    onPick: id => { setRes(n, sid, r => r.ex.push(newE('max', { m:id, mode: isPdc(id) ? 'reps' : (th === 'amax' || th === 'max' ? '1rm' : 'brz') }))); rerender(); } });
+    onPick: id => { setRes(n, sid, r => r.ex.push(newE('max', { m:id, mode: isPdc(id) ? 'reps' : 'brz' }))); rerender(); } });
   if (k === 'th') { const rule = slotRule(n, sid, r.ex || []), mob = mobOf(n, sid);
     return pickMachine({ title:`➕ ${MOB[mob].ico} ${MOB[mob].n} · choisis l'exercice`, hint: rule.hint, n, sid,
       extra: m => noCardio(m) || (rule.ok(m.g) ? null : 'groupe non prévu'),
@@ -1077,7 +1079,7 @@ const A_ELEVE = {
     toast(skip ? `✓ Projet chargé · ${skip} machine(s) indisponible(s) aujourd'hui` : '✓ Projet chargé'); rerender(); },
   addEx: d => addExercise(d.k),
   delEx: async d => { if (!(await confirmBox('Retirer cet exercice ?', 'Les séries et observations saisies seront effacées.', 'Retirer', true))) return;
-    setRes(curLesson(), UI.sid, r => { r.ex = r.ex.filter(E => E.id !== d.e); }); rerender(); },
+    setRes(curLesson(), UI.sid, r => { r.ex = r.ex.filter(E => E.id !== d.e); r.del = [...new Set([...(r.del || []), d.e])]; }); rerender(); },
   maxMode: d => { updE(d.e, E => { E.mode = d.v; if (d.v === '1rm') E.r = 1; else if (E.r === 1) E.r = null; E.v = maxFromEntry(E); }); rerender(); flagSaved(); },
   kgStep: d => { updE(d.e, E => { E.kg = Math.max(0, Math.min(400, (E.kg || 20) + (E.kg ? +d.d : 0))); E.v = maxFromEntry(E); }); rerender(); flagSaved(); },
   kgType: async d => { const E = findE(curLesson(), UI.sid, d.e); const v = await numberBox('Charge (kg)', E?.kg, { step:0.5, min:0, max:400, unit:'kg' });
@@ -1115,6 +1117,11 @@ const A_ELEVE = {
   interOk: d => { updE(d.e, E => { E.it = E.it || {}; E.it.ok = !E.it.ok; }); rerender(); flagSaved(); },
   restGo: d => startRest(+d.s, `${nameOf(UI.sid)}${d.l ? ' · ' + d.l : ''}`, d.k ? UI.sid + d.k : null),
   fq: d => { updE(d.e, E => { E.fq = E.fq || {}; E.fq[d.p] = E.fq[d.p] || []; const v = +d.v; E.fq[d.p][+d.i] = E.fq[d.p][+d.i] === v ? null : v; if (S.curObs) E.by = S.curObs; }); rerender(); flagSaved(); },
+  maxCalc: d => { const card = document.getElementById('ex-' + d.e), num = f => { const el = card?.querySelector(`input[data-field="${f}"]`); if (!el || el.value === '') return undefined; const v = parseFloat(String(el.value).replace(',', '.')); return isNaN(v) ? undefined : v; };
+    const kg = num('maxKg'), rr = num('maxR');
+    updE(d.e, E => { if (kg !== undefined) E.kg = Math.max(0, Math.min(400, r05(kg))); if (rr !== undefined) E.r = Math.max(1, Math.min(E.mode === 'brz' ? BRZ_MAX_R : 150, Math.round(rr))); if (E.mode === '1rm') E.r = 1; E.v = maxFromEntry(E); });
+    const E = findE(curLesson(), UI.sid, d.e); if (!E?.v) toast(E?.mode === 'reps' ? 'Indique le nombre de répétitions' : 'Indique la charge' + (E?.mode === 'brz' ? ' et les répétitions' : ''));
+    rerender(); flagSaved(); },
   crit: d => { const n = curLesson(), E0 = findE(n, UI.sid, d.e), p = lessonPils(n).find(x => x.id === d.p); if (!E0 || !p) return;
     updE(d.e, E => { const i = +d.i, c = +d.c, v = +d.v; E.oc = E.oc || {}; E.oc[d.p] = E.oc[d.p] || []; const row = Array.from({ length: p.cr.length }, (_, k) => E.oc[d.p][i]?.[k] ?? null);
       row[c] = row[c] === v ? null : v; E.oc[d.p][i] = row;
@@ -1555,6 +1562,8 @@ function profExport(){
       <div class="muted" style="font-weight:700;margin-top:6px">Synthèse · max · séances (une ligne par exercice) · piliers · appel · échauffements · évaluations · coach d'un jour.</div></div>
     <div class="card strong"><h2>🖨️ Fiches élèves (PDF)</h2><div class="muted" style="font-weight:700">Une fiche par élève : max, cycle complet, séances détaillées. Dans la fenêtre d'impression : « Enregistrer en PDF ».</div>
       <button class="btn green" data-action="printFiches" style="margin-top:8px">🖨️ Toute la classe (${S.students.length} élèves)</button></div>
+    <div class="card"><h2>📥 Journal des réceptions</h2><div class="muted" style="font-weight:700">${(ROOT.inbox || []).length} QR / fichier(s) reçu(s) conservé(s) sur cette tablette (tablettes élèves et Hippopogramme). En cas de doute, « Tout réintégrer » refait la fusion de toutes les saisies reçues, sans rien effacer.</div>
+      <div class="btn-row" style="margin-top:6px"><button class="btn" data-action="replay">🔁 Tout réintégrer</button></div></div>
     <div class="card"><h2>Sauvegarde complète</h2><div class="btn-row">
       <button class="btn" data-action="backup">💾 Sauvegarder (.json)</button>
       <label class="btn">♻️ Restaurer<input type="file" id="file-restore" accept=".json,application/json" hidden></label></div></div>
@@ -2098,26 +2107,77 @@ function buildMine(all){
   Object.entries(S.projects).forEach(([sid, p]) => { if (p.d === S.deviceId) P[sid] = p; });
   return { pkt:{ k:'res', cid:S.id, from:S.deviceId, at:now(), R, P }, count };
 }
+/* ---------------------------------------------------------------------
+   Fusion SANS PERTE des saisies venant de plusieurs tablettes / de l'enseignant
+   - exercice par exercice (identifiant unique) : on garde la version la plus récente de chaque exercice
+   - les exercices des différentes sources s'additionnent (plus d'écrasement de la fiche entière)
+   - même machine refaite (même type d'exercice) : on garde le dernier résultat, l'ancien est archivé (exOld)
+   - exercices retirés : liste « del » partagée pour qu'ils ne reviennent pas
+   - échauffement, mobile, coach… : la valeur la plus récente, champ par champ
+   --------------------------------------------------------------------- */
+const t0Of = E => E.t0 || E.ts || 0;
+function mergeRecord(a, b){
+  if (!a) return JSON.parse(JSON.stringify(b));
+  if (!b) return a;
+  const out = { ...a }, fa = a.fts || {}, fb = b.fts || {}; out.fts = { ...fa };
+  REC_FIELDS.forEach(k => {
+    const ta = fa[k] ?? (a[k] != null ? (a.ts || 0) : -1), tb = fb[k] ?? (b[k] != null ? (b.ts || 0) : -1);
+    if (k === 'z') { const u = [...new Set([...(a.z || []), ...(b.z || [])])]; if (u.length) out.z = u; return; }
+    if (k === 'coach' && a.coach && b.coach) { out.coach = tb > ta ? { ...a.coach, ...b.coach } : { ...b.coach, ...a.coach }; out.fts.coach = Math.max(ta, tb); return; }
+    if (b[k] != null && (a[k] == null || tb > ta)) { out[k] = b[k]; out.fts[k] = tb; }
+  });
+  const del = [...new Set([...(a.del || []), ...(b.del || [])])];
+  const byId = new Map();
+  [...(a.ex || []), ...(b.ex || [])].forEach(E => { if (!E || del.includes(E.id)) return; const c = byId.get(E.id); if (!c || (E.ts || 0) > (c.ts || 0)) byId.set(E.id, E); });
+  let list = [...byId.values()].sort((x, y) => t0Of(x) - t0Of(y));
+  const old = [...(a.exOld || [])], seen = new Map();
+  (b.exOld || []).forEach(E => { if (!old.some(x => x.id === E.id)) old.push(E); });
+  for (let k = list.length - 1; k >= 0; k--) { const E = list[k]; if (!E.m || !['th','max','coach'].includes(E.k)) continue;
+    const key = E.k + ':' + E.m; if (seen.has(key)) { old.push(E); list.splice(k, 1); } else seen.set(key, E); }
+  const om = new Map(); old.forEach(E => { const c = om.get(E.id); if (!c || (E.ts || 0) > (c.ts || 0)) om.set(E.id, E); });
+  const oldU = [...om.values()].filter(x => !list.some(y => y.id === x.id));
+  out.ex = list; if (oldU.length) out.exOld = oldU; else delete out.exOld; if (del.length) out.del = del;
+  out.ts = Math.max(a.ts || 0, b.ts || 0);
+  return out;
+}
 function mergeRes(R, P){
   let n = 0;
   Object.entries(R || {}).forEach(([l, byS]) => Object.entries(byS || {}).forEach(([sid, r]) => {
     S.results[l] = S.results[l] || {}; const cur = S.results[l][sid];
-    if (!cur || (r.ts || 0) > (cur.ts || 0)) { S.results[l][sid] = r; n++; } }));
+    const m = mergeRecord(cur, r); if (JSON.stringify(m) !== JSON.stringify(cur)) { S.results[l][sid] = m; n++; } }));
   Object.entries(P || {}).forEach(([sid, p]) => { const cur = S.projects[sid]; if (!cur || (p.ts || 0) > (cur.ts || 0)) { S.projects[sid] = p; n++; } });
   return n;
+}
+/* journal des QR / fichiers reçus : rien n'est perdu, on peut tout réintégrer */
+function logInbox(p){
+  if (!isProfRole()) return;
+  ROOT.inbox = ROOT.inbox || [];
+  const sig = JSON.stringify(p); if (ROOT.inbox.some(x => x.sig === sig.length + ':' + sig.slice(-60))) return;
+  ROOT.inbox.push({ at: now(), k: p.k, from: p.from || '', cid: p.cid || '', sig: sig.length + ':' + sig.slice(-60), p });
+  while (ROOT.inbox.length > 400 || JSON.stringify(ROOT.inbox).length > 2.5e6) ROOT.inbox.shift();
+}
+function replayInbox(){
+  const prev = S.id; let n = 0;
+  (ROOT.inbox || []).forEach(x => { if (x.k !== 'res') return; const c = ROOT.classes[x.cid]; if (!c) return; useClass(c.id); n += mergeRes(x.p.R, x.p.P); });
+  useClass(prev); save(); return n;
 }
 async function applyPacket(p){
   if (!p || !p.k) throw new Error('Données non reconnues');
   if (p.k === 'seance') { if (isProfRole()) throw new Error('QR de la leçon : à scanner sur les tablettes élèves'); return applySeance(p); }
   if (p.k === 'res') {
+    logInbox(p);
     const c = targetClass(p.cid, null, false), prev = S.id; useClass(c.id);
     const n = mergeRes(p.R, p.P); useClass(prev); save();
     toast(`✓ ${className(c)} · tablette ${p.from} : ${n} fiche(s) récupérée(s)`, 3500); return n;
   }
-  if (p.k === 'hippo') { if (!isProfRole()) throw new Error('QR Hippopogramme : à scanner sur la tablette enseignant'); hippoImport(p); return 'done'; }
+  if (p.k === 'hippo') { logInbox(p); if (!isProfRole()) throw new Error('QR Hippopogramme : à scanner sur la tablette enseignant'); hippoImport(p); return 'done'; }
   if (p.k === 'full') {
     const c = targetClass(p.c.id, p.c.settings.className, true), prev = S.id;
-    if (hasFullNames(c) && c.id !== p.c.id) { useClass(c.id); const n = mergeRes(p.c.results, p.c.projects); useClass(prev); save(); return n; }
+    if (hasFullNames(c)) {                                     // classe déjà présente : on FUSIONNE, on n'écrase jamais
+      useClass(c.id); const n = mergeRes(p.c.results, p.c.projects);
+      Object.entries(p.c.lessons || {}).forEach(([k, Lb]) => { const La = lesson(k);
+        ['ev','cn','evp','role','att','z','wb'].forEach(f => Object.entries(Lb[f] || {}).forEach(([sid, v]) => { if (La[f][sid] == null) La[f][sid] = v; })); });
+      useClass(prev); save(); toast(`✓ ${className(c)} : ${n} fiche(s) fusionnée(s)`, 3500); return n; }
     ROOT.classes[p.c.id] = normClass(p.c); useClass(p.c.id); save(); toast('✓ Classe ' + className() + ' importée', 3000); go('prof'); return 'done';
   }
   throw new Error('Type de données inconnu');
@@ -2473,6 +2533,7 @@ const A = {
     else { if (a.length >= 3) return toast('3 piliers maximum'); a.push(d.p); }
     L.evp[d.sid] = a; save(); rerender(); },
   // échanges
+  replay: () => { const n = replayInbox(); toast(n ? `✓ ${n} fiche(s) complétée(s)` : '✓ Rien ne manquait : toutes les saisies reçues sont déjà intégrées', 3500); render(); },
   fileFull: () => downloadJSON({ k:'full', c:S }, `Musculation_${(className()).replace(/[^\wÀ-ÿ-]+/g, '_')}.json`),
   fileMine: () => downloadJSON(buildMine(true).pkt, `Musculation_saisies_${S.deviceId}.json`),
   // export / réglages
@@ -2526,7 +2587,7 @@ document.addEventListener('change', e => {
     updE(d.e, E => { if (f === 'maxKg') E.kg = v == null || isNaN(v) ? null : Math.max(0, Math.min(400, r05(v)));
       else E.r = v == null || isNaN(v) ? null : Math.max(1, Math.min(E.mode === 'brz' ? BRZ_MAX_R : 150, Math.round(v))); E.v = maxFromEntry(E); });
     if (f === 'maxR' && d && t.value && +t.value > BRZ_MAX_R && findE(curLesson(), UI.sid, d.e)?.mode === 'brz') toast(`Brzycki : ${BRZ_MAX_R} répétitions maximum`);
-    flagSaved(); rerender(); return; }
+    flagSaved(); return; }
   if (f === 'cf') { const v = t.value === '' ? null : parseFloat(String(t.value).replace(',', '.'));
     updE(d.e, E => { E[d.f] = v == null || isNaN(v) ? null : d.f === 'kg' ? r05(v) : Math.round(v); }); flagSaved(); rerender(); return; }
   if (f === 'exName') { updE(d.e, E => { E.nm = t.value.trim(); }); flagSaved(); }
