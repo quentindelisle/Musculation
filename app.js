@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -68,7 +68,7 @@ const WU_EX = [
 const wuEx = id => WU_EX.find(x => x.id === id) || machine(id);
 const PDC_3x3 = ['pompes','tractions','dips','abdos','chaise_romaine'];
 const ENDU = ['velo','tapis','ellip'];
-const WU_TYPES = { none:'Pas d\'échauffement guidé', circuit:'Circuit Training', '3x3':'3 × 3 minutes' };
+const WU_TYPES = { none:'Pas d\'échauffement', circuit:'Circuit Training', '3x3':'3 × 3 minutes' };
 
 /* ---------------------------------------------------------------------
    Mobiles (protocoles) et thèmes des leçons
@@ -402,8 +402,10 @@ function wuBlocked(n, sid, id){ const x = wuEx(id); const z = zonesOf(n, sid); i
    Piliers de la leçon (1 ou 2 ; évaluation finale : au choix, + Sécurité)
    Sur les tablettes élèves, L.pilS = copie reçue du prof (avec les observables retenus)
    --------------------------------------------------------------------- */
+const noObs = n => lesson(n).obs === false;
 function lessonPils(n){
   const L = lesson(n);
+  if (L.obs === false) return [];
   if (Array.isArray(L.pilS) && !isProfRole()) return L.pilS;
   return L.pil.map(id => { const p = pilier(id); if (!p || p.prof) return null;
     const keep = L.crit[id]; const cr = Array.isArray(keep) && keep.length ? p.cr.filter((_, i) => keep.includes(i)) : p.cr.filter(Boolean);
@@ -704,6 +706,10 @@ function viewSaisie(){
   const grpBtn = nbGroups() > 1 ? `<button class="btn small" data-action="pickGroup" data-g="">🎽 ${UI.filter && UI.filter !== 'all' ? groupName(UI.filter) + ' · changer' : 'Changer de groupe'}</button>` : '';
   const list = sortedStudents().filter(s => present(n, s.id) && passFilter(s));
   const ob = S.curObs;
+  /* leçon sans observateur : chaque élève remplit lui-même sa fiche */
+  if (noObs(n)) return `<div class="card strong"><div class="row"><b style="font-size:22px" class="grow">👤 Qui es-tu ?</b>${grpBtn}</div>
+      <div class="muted" style="font-weight:700">Pas d'observateur aujourd'hui : touche ton prénom et remplis toi-même ta fiche.</div></div>
+    <div class="tiles">${list.map(s => saisieTile(n, s)).join('') || '<p>Aucun élève dans ce groupe.</p>'}</div>`;
   /* 1. Qui es-tu ? (l'observateur tient la tablette) */
   if (!ob) return `<div class="card strong"><div class="row"><b style="font-size:22px" class="grow">👤 Qui es-tu ?</b>${grpBtn}</div>
       <div class="muted" style="font-weight:700">Tu tiens la tablette et tu observes un camarade. Touche ton prénom.</div></div>
@@ -749,7 +755,7 @@ function viewEntry(){
   const i = list.findIndex(x => x.id === sid), prev = list[i-1], next = list[i+1];
   let h = `<div class="entry-name">${band(sid)}<div class="who">${esc(nameOf(sid))}</div><span class="saved" id="saved-flag"></span>
     <span class="theme-badge" style="background:${T.c}">${T.ico} ${esc(T.n)}</span>
-    ${S.curObs ? `<span class="obs-by">👀 observé par <b>${S.curObs === 'x' ? 'l\'enseignant' : esc(nameOf(S.curObs))}</b></span>` : ''}
+    ${S.curObs && !noObs(n) ? `<span class="obs-by">👀 observé par <b>${S.curObs === 'x' ? 'l\'enseignant' : esc(nameOf(S.curObs))}</b></span>` : ''}
     <button class="btn" data-action="go" data-view="saisie" style="margin-left:auto">← Élèves</button></div>`;
   h += startBlock(n, sid, r);
   if (th !== 'coach') h += wuBlock(n, sid, r);
@@ -780,7 +786,8 @@ function startBlock(n, sid, r){
 /* Échauffement : Circuit Training ou 3 × 3 minutes */
 function wuBlock(n, sid, r){
   const coach = thOf(n) === 'coach', LW = lesson(n).wu || {};
-  const W = coach ? { t: r.wu?.t || (LW.t && LW.t !== 'none' ? LW.t : 'circuit'), nb: LW.nb || 6, dur: LW.dur || 30 } : LW; if (!W.t || W.t === 'none') return '';
+  if (!LW.t || LW.t === 'none') return '';
+  const W = coach ? { t: r.wu?.t || LW.t, nb: LW.nb || 6, dur: LW.dur || 30 } : LW;
   const w = r.wu || {}, ok = !!w.ok, open = UI.open['wu'] ?? !ok;
   const chip = (id, on, act, extra='') => { const x = wuEx(id), b = wuBlocked(n, sid, id);
     return `<button class="wu-chip ${on ? 'on' : ''} ${b ? 'blk' : ''}" data-action="${act}" data-id="${id}" ${extra} ${b ? 'disabled' : ''} title="${b ? esc(b) : ''}">${x.img ? mImg(x, 'wu-img') : `<span class="wu-ico">${x.ico}</span>`}<span>${esc(x.n)}</span></button>`; };
@@ -929,7 +936,7 @@ function setsBody(n, sid, E, t){
         <span class="muted">/ ${r}</span></div>`).join('')}</div>
       <div class="btn-row"><button class="btn green" data-action="setAll" data-e="${E.id}">✓ Toutes les séries réussies (${nbS} × ${r})</button>${t.rest ? `<button class="btn" data-action="restGo" data-s="${t.rest}" data-k="${E.id}" data-l="${esc(E.m ? mName(E.m) : E.nm || '')}">⏳ Récup ${fmtRest(t.rest)}</button>` : ''}</div>`;
     if (sets.some(v => v == null)) h += `<div class="muted" style="font-weight:700;margin-top:8px">👀 Le niveau d'atteinte des piliers et l'échelle de Borg s'afficheront quand toutes les séries seront saisies.</div>`;
-    else h += pilDials(n, E, 0, 'Exercice terminé · niveau d\'atteinte et ressenti') + nextBtn(n, sid, E);
+    else h += pilDials(n, E, 0, noObs(n) ? 'Exercice terminé · ton ressenti' : 'Exercice terminé · niveau d\'atteinte et ressenti') + nextBtn(n, sid, E);
     return h;
   }
   /* série par série */
@@ -1008,8 +1015,8 @@ function bindEntry(){
   bindDials((d, v) => {
     const i = +d.i; UI.cur = UI.cur || {}; if (!d.p || UI.cur[d.e] == null) UI.cur[d.e] = i;
     updE(d.e, E => {
-      if (d.kind === 'borg') { E.bg = E.bg || []; E.bg[i] = v; if (S.curObs) E.by = S.curObs; }
-      else if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; if (S.curObs) E.by = S.curObs; }
+      if (d.kind === 'borg') { E.bg = E.bg || []; E.bg[i] = v; if (S.curObs && !noObs(curLesson())) E.by = S.curObs; }
+      else if (d.p) { E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = v; if (S.curObs && !noObs(curLesson())) E.by = S.curObs; }
       else { E.sets = E.sets || []; E.sets[i] = v; }
     });
     flagSaved(); rerender();
@@ -1116,7 +1123,7 @@ const A_ELEVE = {
   interPick: d => { updE(d.e, E => { E.it = E.it || {}; E.it.x = E.it.x === d.id ? null : d.id; }); rerender(); flagSaved(); },
   interOk: d => { updE(d.e, E => { E.it = E.it || {}; E.it.ok = !E.it.ok; }); rerender(); flagSaved(); },
   restGo: d => startRest(+d.s, `${nameOf(UI.sid)}${d.l ? ' · ' + d.l : ''}`, d.k ? UI.sid + d.k : null),
-  fq: d => { updE(d.e, E => { E.fq = E.fq || {}; E.fq[d.p] = E.fq[d.p] || []; const v = +d.v; E.fq[d.p][+d.i] = E.fq[d.p][+d.i] === v ? null : v; if (S.curObs) E.by = S.curObs; }); rerender(); flagSaved(); },
+  fq: d => { updE(d.e, E => { E.fq = E.fq || {}; E.fq[d.p] = E.fq[d.p] || []; const v = +d.v; E.fq[d.p][+d.i] = E.fq[d.p][+d.i] === v ? null : v; if (S.curObs && !noObs(curLesson())) E.by = S.curObs; }); rerender(); flagSaved(); },
   maxCalc: d => { const card = document.getElementById('ex-' + d.e), num = f => { const el = card?.querySelector(`input[data-field="${f}"]`); if (!el || el.value === '') return undefined; const v = parseFloat(String(el.value).replace(',', '.')); return isNaN(v) ? undefined : v; };
     const kg = num('maxKg'), rr = num('maxR');
     updE(d.e, E => { if (kg !== undefined) E.kg = Math.max(0, Math.min(400, r05(kg))); if (rr !== undefined) E.r = Math.max(1, Math.min(E.mode === 'brz' ? BRZ_MAX_R : 150, Math.round(rr))); if (E.mode === '1rm') E.r = 1; E.v = maxFromEntry(E); });
@@ -1127,8 +1134,8 @@ const A_ELEVE = {
       row[c] = row[c] === v ? null : v; E.oc[d.p][i] = row;
       E.ob = E.ob || {}; E.ob[d.p] = E.ob[d.p] || []; E.ob[d.p][i] = critNote(row, isBin(E));
       E.fq = E.fq || {}; E.fq[d.p] = E.fq[d.p] || []; const f = row.filter(x => x != null); E.fq[d.p][i] = isBin(E) || !f.length ? null : Math.round(avg(f));
-      if (S.curObs) E.by = S.curObs; }); rerender(); flagSaved(); },
-  borg: d => { updE(d.e, E => { const i = +d.i, v = +d.v; E.bg = E.bg || []; E.bg[i] = E.bg[i] === v ? null : v; if (S.curObs) E.by = S.curObs; }); rerender(); flagSaved(); },
+      if (S.curObs && !noObs(curLesson())) E.by = S.curObs; }); rerender(); flagSaved(); },
+  borg: d => { updE(d.e, E => { const i = +d.i, v = +d.v; E.bg = E.bg || []; E.bg[i] = E.bg[i] === v ? null : v; if (S.curObs && !noObs(curLesson())) E.by = S.curObs; }); rerender(); flagSaved(); },
   pickObs: d => { S.curObs = d.sid; save(); rerender(); },
   changeObs: () => { delete S.curObs; save(); render(); window.scrollTo(0, 0); },
   restStop: d => stopRest(d.k),
@@ -1313,10 +1320,13 @@ function profCycle(){
     rows += `<div class="lrow"><div class="lesson-num ${n===cur?'cur':''}" style="background:${T.c}">${n}</div><div class="lrow-main">
       <div class="lrow-top"><label class="pil-sel">${T.ico}<select data-field="th" data-n="${n}">${THEME_IDS.map(k => `<option value="${k}" ${th===k?'selected':''}>${esc(THEMES[k].n)}</option>`).join('')}</select></label>
         <label class="pil-sel">👀<select data-field="suivi" data-n="${n}"><option value="s" ${L.suivi==='s'?'selected':''}>Suivi série par série</option><option value="e" ${L.suivi==='e'?'selected':''}>Suivi par exercice (fin d'exercice)</option></select></label>
-        <label class="pil-sel">🔥<select data-field="wuT" data-n="${n}">${Object.entries(WU_TYPES).map(([k, v]) => `<option value="${k}" ${W.t===k?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+        <button class="tgl ${W.t !== 'none' ? 'on' : ''}" data-action="wuOnOff" data-n="${n}">🔥 Échauffement : <b>${W.t !== 'none' ? 'oui' : 'non'}</b></button>
+        <button class="tgl ${L.obs !== false ? 'on' : ''}" data-action="obsOnOff" data-n="${n}">👀 Observateur : <b>${L.obs !== false ? 'oui' : 'non'}</b></button>
+        ${W.t !== 'none' ? `<label class="pil-sel">🔥<select data-field="wuT" data-n="${n}">${Object.entries(WU_TYPES).filter(([k]) => k !== 'none').map(([k, v]) => `<option value="${k}" ${W.t===k?'selected':''}>${esc(v)}</option>`).join('')}</select></label>` : ''}
         ${W.t === 'circuit' ? `<label class="pil-sel">nb<select data-field="wuNb" data-n="${n}">${[4,5,6,7,8,9,10].map(v => `<option ${+W.nb===v?'selected':''}>${v}</option>`).join('')}</select></label>
           <label class="pil-sel">⏱<select data-field="wuDur" data-n="${n}">${[30,45,60].map(v => `<option value="${v}" ${+W.dur===v?'selected':''}>${v} s</option>`).join('')}</select></label>` : ''}</div>
-      <div class="lrow-pil"><span class="muted" style="font-weight:800">${th === 'evf' ? 'Piliers évalués (dont 🛡️ Sécurité) :' : `Piliers (${L.pil.length}/${mp}) :`}</span> ${pilChips}</div>${crit}</div></div>`;
+      ${L.obs === false ? `<div class="lrow-pil muted" style="font-weight:800">Pas d'observateur : l'élève remplit seul sa fiche (répétitions, charge, ressenti), sans notes de piliers.${th === 'evf' || th === 'evi' ? ' Vos piliers d\'évaluation restent : ' + (L.pil.map(id => pilier(id)?.ico + ' ' + pilier(id)?.n).join(' · ') || 'aucun') : ''}</div>${th === 'evf' || th === 'evi' ? `<div class="lrow-pil">${pilChips}</div>` : ''}`
+        : `<div class="lrow-pil"><span class="muted" style="font-weight:800">${th === 'evf' ? 'Piliers évalués (dont 🛡️ Sécurité) :' : `Piliers (${L.pil.length}/${mp}) :`}</span> ${pilChips}</div>${crit}`}</div></div>`;
   }
   return `<div class="card strong compact"><div class="row"><div class="rf"><div class="rf-h"><span class="rf-l">📅 Nombre de leçons</span></div>${stepper('nbLessons','',N)}</div>
       <div class="muted grow" style="font-weight:700">Pour chaque leçon : le thème, 1 ou 2 piliers observés par un camarade, le mode de suivi (selon le nombre de tablettes) et l'échauffement.</div></div></div>
@@ -1562,7 +1572,8 @@ function profExport(){
       <div class="muted" style="font-weight:700;margin-top:6px">Synthèse · max · séances (une ligne par exercice) · piliers · appel · échauffements · évaluations · coach d'un jour.</div></div>
     <div class="card strong"><h2>🖨️ Fiches élèves (PDF)</h2><div class="muted" style="font-weight:700">Une fiche par élève : max, cycle complet, séances détaillées. Dans la fenêtre d'impression : « Enregistrer en PDF ».</div>
       <button class="btn green" data-action="printFiches" style="margin-top:8px">🖨️ Toute la classe (${S.students.length} élèves)</button></div>
-    <div class="card"><h2>📥 Journal des réceptions</h2><div class="muted" style="font-weight:700">${(ROOT.inbox || []).length} QR / fichier(s) reçu(s) conservé(s) sur cette tablette (tablettes élèves et Hippopogramme). En cas de doute, « Tout réintégrer » refait la fusion de toutes les saisies reçues, sans rien effacer.</div>
+    <div class="card"><h2>📥 Journal des réceptions et sauvegardes</h2><div class="muted" style="font-weight:700">${(ROOT.inbox || []).length} réception(s) conservée(s) sur cette tablette : QR et fichiers des tablettes élèves, Hippopogramme, imports de classe, restaurations. « Tout réintégrer » refait la fusion de toutes les saisies reçues, sans rien effacer.</div>
+      ${inboxTable()}
       <div class="btn-row" style="margin-top:6px"><button class="btn" data-action="replay">🔁 Tout réintégrer</button></div></div>
     <div class="card"><h2>Sauvegarde complète</h2><div class="btn-row">
       <button class="btn" data-action="backup">💾 Sauvegarder (.json)</button>
@@ -1574,6 +1585,16 @@ function profExport(){
       <button class="btn small ghost" data-action="clearResults">Effacer tous les résultats</button>
       <button class="btn small red" data-action="resetAll">Réinitialiser cette classe</button></div>
       <p class="muted" style="font-size:14px">Version ${APP_VERSION} · appareil ${esc(S.deviceId)}</p></div>`;
+}
+const INBOX_K = { res:'📲 Saisies tablette', hippo:'🦛 Hippopogramme', full:'🗂 Import de classe', restore:'♻️ Restauration' };
+function inboxTable(){
+  const L = [...(ROOT.inbox || [])].reverse(), all = UI.inboxAll, rows = all ? L : L.slice(0, 15);
+  if (!L.length) return '';
+  return `<div class="pj-table-wrap" style="margin-top:6px"><table class="pj-table inbox-tab"><tr><th>Arrivée</th><th>Type</th><th>Classe</th><th>Détail</th><th>Version</th></tr>
+    ${rows.map(x => `<tr><td><b>${esc(dateTxt(x.at))}</b></td><td>${INBOX_K[x.k] || esc(x.k)}</td><td>${esc(x.cn || (ROOT.classes[x.cid] ? className(ROOT.classes[x.cid]) : '—'))}</td>
+      <td>${x.k === 'res' ? `tablette ${esc(x.from)} · ${x.ls?.length ? 'leçon ' + x.ls.join(', ') : ''} · ${x.nb ?? '?'} fiche(s)` : x.k === 'hippo' ? `${x.nb ?? '?'} élève(s)` : x.savedAt ? `sauvegarde du ${esc(dateTxt(x.savedAt))}${x.file ? ' · ' + esc(x.file) : ''}` : ''}</td>
+      <td>${esc(x.app || '')}${x.appVersion && x.appVersion !== x.app ? ` <small class="muted">(fichier ${esc(x.appVersion)})</small>` : ''}</td></tr>`).join('')}</table></div>
+    ${L.length > 15 ? `<button class="btn small ghost" data-action="inboxAll" style="margin-top:4px">${all ? 'Afficher les 15 dernières' : `Tout afficher (${L.length})`}</button>` : ''}`;
 }
 function profTransfert(){
   return `<div class="card"><h2>🔁 Vers une autre tablette enseignant</h2>
@@ -1668,7 +1689,7 @@ const q25 = v => Math.round(v * 4) / 4;
 function carnetLesson(n, sid){
   const th = thOf(n), at = attOf(n, sid); if (th === 'hippo' || at === 'abs' || at === 'disp') return null;
   const r = res(n, sid) || { ex:[] }, ex = r.ex || [], d = {};
-  const W = th === 'coach' ? { t: r.wu?.t || 'circuit', nb: lesson(n).wu.nb || 6 } : lesson(n).wu;
+  const W = th === 'coach' && lesson(n).wu.t !== 'none' ? { t: r.wu?.t || lesson(n).wu.t, nb: lesson(n).wu.nb || 6 } : lesson(n).wu;
   if (!W || W.t === 'none') d.wu = 0.5;
   else { const w = r.wu || {}, nbC = W.t === '3x3' ? ['p','c','e'].filter(k => w[k]).length / 3 : Math.min(1, (w.ex || []).length / (W.nb || 6)); d.wu = 0.25 * nbC + (w.ok ? 0.25 : 0); }
   const M = MOB[th === 'coach' ? r.coach?.mob : mobOf(n, sid)];
@@ -2067,7 +2088,7 @@ function buildSeance(n){
   });
   const roles = L.th === 'coach' ? Object.fromEntries(ROOT.roles.map(r => [r.id, { n:r.n, t:r.t }])) : null;
   return { k:'seance', v:1, cid:S.id, cn:className(), pin:ROOT.pin, nbL:S.settings.nbLessons, cur:n, ng:nbGroups(), gc:S.settings.groupColors.slice(0, nbGroups()), off:ROOT.mOff,
-    L:{ th:L.th, pil:lessonPils(n), suivi:L.suivi, wu:L.wu, hs:L.hs },
+    L:{ th:L.th, pil:lessonPils(n), suivi:L.suivi, wu:L.wu, hs:L.hs, obs: L.obs === false ? 0 : 1 },
     st: list.map(s => [s.id, nameOf(s.id), grpOf(s.id, n), attOf(n, s.id) || 0, zoneMask(L.z[s.id] || []), nz(L.wb[s.id]?.fo), nz(L.wb[s.id]?.mo), L.role[s.id] || 0]),
     mp: ROOT.mob || null, mx, hist, pj, roles, pr: { ...(S.pairs || {}), ...pairsFromResults() } };
 }
@@ -2086,7 +2107,7 @@ function applySeance(p){
   ROOT.pin = p.pin || ROOT.pin; ROOT.mOff = p.off || [];
   S.students = p.st.map(a => ({ id:a[0], disp:a[1], grp:a[2] || 0 }));
   const L = lesson(p.cur);
-  L.th = p.L.th; L.pilS = p.L.pil || []; L.pil = L.pilS.map(x => x.id); L.suivi = p.L.suivi; L.wu = p.L.wu || { t:'none' }; L.hs = p.L.hs || [];
+  L.th = p.L.th; L.pilS = p.L.pil || []; L.pil = L.pilS.map(x => x.id); L.suivi = p.L.suivi; L.wu = p.L.wu || { t:'none' }; L.hs = p.L.hs || []; L.obs = p.L.obs === 0 ? false : true;
   L.att = {}; L.z = {}; L.wb = {}; L.role = {}; L.roleS = p.roles || null; L.grpOv = {};
   p.st.forEach(a => { const [id, , , at, zm, fo, mo, ro] = a;
     if (at) L.att[id] = at; const z = maskZones(zm); if (z.length) L.z[id] = z;
@@ -2149,11 +2170,17 @@ function mergeRes(R, P){
   return n;
 }
 /* journal des QR / fichiers reçus : rien n'est perdu, on peut tout réintégrer */
+function fileTag(s){ return String(s || 'classe').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').slice(0, 60); }
+function stamp(t){ const d = new Date(t), p = v => String(v).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}h${p(d.getMinutes())}`; }
+function dateTxt(t){ const d = new Date(t); return d.toLocaleDateString('fr-FR', { weekday:'short', day:'2-digit', month:'2-digit', year:'numeric' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }); }
+/* événement sans contenu (import de classe, restauration) */
+function logEvent(e){ ROOT.inbox = ROOT.inbox || []; ROOT.inbox.push({ at: now(), app: APP_VERSION, ...e }); while (ROOT.inbox.length > 400) ROOT.inbox.shift(); }
 function logInbox(p){
   if (!isProfRole()) return;
   ROOT.inbox = ROOT.inbox || [];
   const sig = JSON.stringify(p); if (ROOT.inbox.some(x => x.sig === sig.length + ':' + sig.slice(-60))) return;
-  ROOT.inbox.push({ at: now(), k: p.k, from: p.from || '', cid: p.cid || '', sig: sig.length + ':' + sig.slice(-60), p });
+  const c = ROOT.classes[p.cid], ls = Object.keys(p.R || {}), nb = Object.values(p.R || {}).reduce((a, b) => a + Object.keys(b || {}).length, 0);
+  ROOT.inbox.push({ at: now(), app: APP_VERSION, k: p.k, from: p.from || '', cid: p.cid || '', cn: c ? className(c) : (p.cn || ''), ls, nb: p.k === 'hippo' ? (p.p || []).length : nb, sig: sig.length + ':' + sig.slice(-60), p });
   while (ROOT.inbox.length > 400 || JSON.stringify(ROOT.inbox).length > 2.5e6) ROOT.inbox.shift();
 }
 function replayInbox(){
@@ -2172,6 +2199,7 @@ async function applyPacket(p){
   }
   if (p.k === 'hippo') { logInbox(p); if (!isProfRole()) throw new Error('QR Hippopogramme : à scanner sur la tablette enseignant'); hippoImport(p); return 'done'; }
   if (p.k === 'full') {
+    if (isProfRole()) logEvent({ k:'full', cn: p.c.settings?.className || '', savedAt: p.savedAt, appVersion: p.appVersion });
     const c = targetClass(p.c.id, p.c.settings.className, true), prev = S.id;
     if (hasFullNames(c)) {                                     // classe déjà présente : on FUSIONNE, on n'écrase jamais
       useClass(c.id); const n = mergeRes(p.c.results, p.c.projects);
@@ -2249,8 +2277,10 @@ async function importSyncFile(file){
     const obj = JSON.parse(await file.text());
     if (obj.k) await applyPacket(obj);
     else if (obj.classes) {
-      if (!(await confirmBox('Restaurer la sauvegarde ?', 'Toutes les classes de cet appareil seront remplacées.', 'Restaurer', true))) return;
-      const dev = ROOT.deviceId; ROOT = obj; ROOT.deviceId = dev; loadRootFix(); save(); toast('✓ Sauvegarde restaurée'); go('home');
+      const names = obj.classNames || Object.values(obj.classes).map(c => c.settings?.className || 'Classe');
+      if (!(await confirmBox('Restaurer la sauvegarde ?', `<b>${esc(names.join(', '))}</b><br>Sauvegarde du ${obj.savedAt ? esc(dateTxt(obj.savedAt)) : 'date inconnue'}${obj.appVersion ? ` · appli version ${esc(obj.appVersion)}` : ''}<br>Toutes les classes de cet appareil seront remplacées.`, 'Restaurer', true))) return;
+      const keepInbox = ROOT.inbox || []; logEvent({ k:'restore', cn: names.join(', '), savedAt: obj.savedAt, appVersion: obj.appVersion, file: file.name });
+      const dev = ROOT.deviceId, log = ROOT.inbox; ROOT = obj; ROOT.deviceId = dev; ROOT.inbox = [...(obj.inbox || []), ...(log || [])].slice(-400); delete ROOT.savedAt; delete ROOT.classNames; delete ROOT.appVersion; loadRootFix(); save(); toast('✓ Sauvegarde restaurée'); go('home');
     } else throw new Error('Fichier non reconnu');
     render();
   } catch(e){ toast('⚠️ ' + e.message, 3500); }
@@ -2504,6 +2534,8 @@ const A = {
   critToggle: d => { const L = lesson(+d.n), p = pilier(d.p); let k = L.crit[d.p]; if (!k || !k.length) k = p.cr.map((_, i) => i);
     const i = +d.i; k = k.includes(i) ? k.filter(x => x !== i) : [...k, i].sort();
     if (!k.length) return toast('Gardez au moins un critère'); L.crit[d.p] = k.length === p.cr.length ? [] : k; save(); render(); },
+  wuOnOff: d => { const L = lesson(+d.n); if (L.wu.t !== 'none') { L.wuPrev = L.wu.t; L.wu = { ...L.wu, t:'none' }; } else L.wu = { t: L.wuPrev || 'circuit', nb: L.wu.nb || 6, dur: L.wu.dur || 30 }; save(); rerender(); },
+  obsOnOff: d => { const L = lesson(+d.n); L.obs = L.obs === false ? true : false; save(); rerender(); },
   mobReset: async () => { if (!(await confirmBox('Revenir aux valeurs proposées ?', 'Séries, répétitions, récupérations et pourcentages des 5 mobiles sont remis par défaut.', 'Rétablir', true))) return; ROOT.mob = null; applyMobParams(null); save(); render(); },
   pilReset: async () => { if (!(await confirmBox('Revenir aux observables proposés ?', 'Les noms et observables modifiés seront remplacés.', 'Rétablir', true))) return;
     ROOT.piliers = DEFAULT_PILIERS.map(p => ({ ...p, cr:[...p.cr] })); save(); render(); },
@@ -2533,14 +2565,16 @@ const A = {
     else { if (a.length >= 3) return toast('3 piliers maximum'); a.push(d.p); }
     L.evp[d.sid] = a; save(); rerender(); },
   // échanges
+  inboxAll: () => { UI.inboxAll = !UI.inboxAll; rerender(); },
   replay: () => { const n = replayInbox(); toast(n ? `✓ ${n} fiche(s) complétée(s)` : '✓ Rien ne manquait : toutes les saisies reçues sont déjà intégrées', 3500); render(); },
-  fileFull: () => downloadJSON({ k:'full', c:S }, `Musculation_${(className()).replace(/[^\wÀ-ÿ-]+/g, '_')}.json`),
-  fileMine: () => downloadJSON(buildMine(true).pkt, `Musculation_saisies_${S.deviceId}.json`),
+  fileFull: () => { const t = now(); downloadJSON({ k:'full', c:S, savedAt: t, appVersion: APP_VERSION }, `Musculation_${fileTag(className())}_${stamp(t)}.json`); },
+  fileMine: () => { const t = now(); downloadJSON({ ...buildMine(true).pkt, cn: className(), appVersion: APP_VERSION }, `Musculation_saisies_${fileTag(className())}_L${curLesson()}_${stamp(t)}.json`); },
   // export / réglages
   exportXlsx: () => exportXlsx(),
   printFiches: () => printFiches(sortedStudents().map(s => s.id)),
   printFiche: d => printFiches([d.sid]),
-  backup: () => downloadJSON(ROOT, `Musculation_sauvegarde_${new Date().toISOString().slice(0,10)}.json`),
+  backup: () => { const t = now(), names = Object.values(ROOT.classes).map(c => className(c));
+    downloadJSON({ ...ROOT, savedAt: t, appVersion: APP_VERSION, classNames: names }, `Musculation_sauvegarde_${fileTag(names.join('-'))}_${stamp(t)}.json`); },
   setPin: () => { const v = $('#new-pin').value.trim(); if (!/^\d{4}$/.test(v)) return toast('4 chiffres requis'); ROOT.pin = v; save(); $('#new-pin').value=''; toast('✓ Code modifié'); },
   clearResults: async () => { if (await confirmBox('Effacer tous les résultats ?', 'Séances, max, projets et notes seront supprimés (la liste et les leçons restent).', 'Effacer', true)) { S.results = {}; S.projects = {}; S.mx = {}; S.hist = {}; Object.values(S.lessons).forEach(L => { L.ev = {}; L.cn = {}; }); save(); render(); } },
   resetAll: async () => { if (await confirmBox('Effacer « ' + className() + ' » ?', 'Élèves, leçons et résultats de cette classe repartent à zéro.', 'Tout effacer', true)) {

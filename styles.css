@@ -1075,3 +1075,7 @@ button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
 .mx-up{color:#0B4F1C;font-weight:900;background:#E2F5E5;border-radius:6px;padding:0 5px}
 .mx-new{color:#0062C4;font-weight:800;font-size:12px}
 .mx-down{color:var(--red);font-weight:800}
+/* v1.7.0 — interrupteurs échauffement / observateur, journal */
+.tgl{min-height:34px;border:2px solid var(--line);border-radius:999px;background:#fff;padding:2px 12px;font-weight:700;font-size:13px;color:var(--grey)}
+.tgl.on{border-color:var(--green);background:var(--green-l);color:#0B4F1C}
+.inbox-tab td,.inbox-tab th{font-size:13px}
