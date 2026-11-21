@@ -1095,3 +1095,33 @@ button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
 .fl.on{border-color:var(--orange);background:var(--orange);color:#fff}
 .fl-sep{color:var(--line);font-weight:900}
 .flow-next{display:flex;justify-content:center;margin:12px 0}
+
+/* ===== v1.9 : menu « une leçon = un bouton » + outils de la leçon ===== */
+.pmenu.one{grid-template-columns:1fr;margin:10px 0}
+.pmenu.one .pm-btn{min-height:76px!important;flex-direction:row}
+.pmenu.tools{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.pmenu.tools .pm-btn{min-height:110px!important}
+.pm-btn.okb{border-color:var(--green);background:var(--green-l)}
+.ltiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.ltile{position:relative;display:flex;align-items:center;gap:8px;text-align:left;padding:8px;border-radius:14px;border:3px solid var(--tc,var(--navy));background:#fff;color:var(--navy);font-family:inherit}
+.ltile .lt-num{flex:none;width:42px;height:42px;border-radius:10px;background:var(--tc,var(--navy));color:#fff;font-weight:900;font-size:20px;display:flex;align-items:center;justify-content:center}
+.ltile .lt-main{display:flex;flex-direction:column;min-width:0}
+.ltile .lt-main b{font-size:15px;line-height:1.15}
+.ltile .lt-main small{font-size:12px;color:var(--grey);font-weight:800}
+.ltile.cur{box-shadow:0 0 0 3px var(--orange)}
+.ltile.done{background:#F1F8F2;border-style:dashed}
+.ltile.done .lt-num{opacity:.75}
+.ltile .lt-ok{position:absolute;right:-6px;top:-8px;width:28px;height:28px;border-radius:50%;background:#18A23A;color:#fff;font-weight:900;font-size:17px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.ltile .lt-ok::after{content:'🔒';position:absolute;right:-8px;bottom:-8px;font-size:13px}
+.lp.lk{opacity:.85;border-color:#18A23A;background:#F1F8F2}
+.lp.lk.on{background:var(--orange);opacity:1}
+.lesson-num{position:relative}
+.lesson-num .ln-ok{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:50%;background:#18A23A;color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center}
+.advice.lockinfo{background:#F1F8F2;border-color:#18A23A;margin-top:6px}
+.mpick.unsel{opacity:.55}
+.mpick-grid.sm{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+.mpick-grid.sm .mpick img{max-height:56px}
+.exchip{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:var(--green-l);border:1px solid var(--green);font-size:13px;font-weight:800}
+.ex-sum{align-items:center}
+.lp.lk::after{content:'🔒';position:absolute;right:-5px;top:-7px;font-size:12px}
+.lp{position:relative}
