@@ -6,7 +6,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const ROOT_KEY = 'neps_muscu_v1';
 const QR_CHUNK = 440;           // caractères base45 par QR
 
@@ -406,6 +406,7 @@ const noObs = n => lesson(n).obs === false;
 function lessonPils(n){
   const L = lesson(n);
   if (L.obs === false) return [];
+  if (L.done && Array.isArray(L.pilSnap) && isProfRole()) return L.pilSnap;
   if (Array.isArray(L.pilS) && !isProfRole()) return L.pilS;
   return L.pil.map(id => { const p = pilier(id); if (!p || p.prof) return null;
     const keep = L.crit[id]; const cr = Array.isArray(keep) && keep.length ? p.cr.filter((_, i) => keep.includes(i)) : p.cr.filter(Boolean);
@@ -462,7 +463,7 @@ function target(n, sid, E){
     const kg = E.kg > 0 ? E.kg : null;
     return { s:E.s || 0, r:E.r || 0, rest:E.rest || 0, pct:E.pct || null, kg, zone: kg ? kgZone(kg) : null, custom:true };
   }
-  const mob = E.mob || mobOf(n, sid); const M = MOB[mob]; if (!M) return null;
+  const mob = E.mob || mobOf(n, sid); const M = mobP(n, mob); if (!M) return null;
   const pct = mob === 'vol' ? (enForme(n, sid) ? M.pct : M.pctLow) : M.pct;
   const mx = E.m ? maxVal(sid, E.m, n) : null;
   if (isPdc(E.m)) { const r = mx ? Math.max(1, Math.round(mx * pct / 100)) : M.r;
@@ -1269,35 +1270,44 @@ function openProf(){
 }
 const PSECT = {
   prep:   { ico:'🛠', t:'Préparer le cycle', tabs:[['classes','👥 Classe & élèves'],['groupes','🎽 Groupes'],['cycle','📅 Cycle & leçons'],['piliers','🏛 Piliers & observables'],['mobiles','🎯 Mobiles'],['machines','🏋️ Machines de la salle'],['roles','🎭 Rôles Coach d\'un jour']] },
-  jour:   { ico:'📅', t:'Leçon du jour', tabs:[['appel','✅ Appel'],['hs','🚫 Machines HS'],['tirage','🎲 Coach : tirage'],['evalJ','📝 Évaluer'],['qr','📲 QR de la leçon'],['saisieP','✍️ Saisie (dépannage)']] },
+  jour:   { ico:'📅', t:'Leçon du jour', tabs:[['lecon','📝 Préparer la leçon'],['appel','✅ Appel'],['qr','📲 QR de la leçon'],['tirage','🎲 Coach : tirage'],['evalJ','📝 Évaluer'],['saisieP','✍️ Saisie (dépannage)'],['fin','🏁 Terminer la leçon']] },
   recup:  { ico:'📥', t:'Récupérer les saisies', tabs:[] },
   bilans: { ico:'📊', t:'Suivi et bilans', tabs:[['suiviP','👤 Suivi élève'],['maxes','🏋️ Max de la classe'],['bilanL','🔎 Bilan par leçon'],['evals','📝 Notes des évaluations'],['coachB','🎭 Coach d\'un jour'],['export','📁 Export & sauvegarde']] } };
 const PREDIR = { saisieP:'saisie', suiviP:'suivi' };
-function sectOf(tab){ if (tab === 'recup') return 'recup'; return Object.keys(PSECT).find(k => PSECT[k].tabs.some(t => t[0] === tab)) || null; }
+function sectOf(tab){ if (tab === 'recup') return 'recup'; if (tab === 'hs') return 'jour'; return Object.keys(PSECT).find(k => PSECT[k].tabs.some(t => t[0] === tab)) || null; }
 function sectHeader(sec){
   const P = PSECT[sec], N = S.settings.nbLessons, cur = curLesson();
   return `<div class="btn-row" style="margin-bottom:10px"><button class="btn small" data-action="profTab" data-tab="menu">← Menu enseignant</button></div>
     <div class="card strong compact"><h2>${P.ico} ${P.t}</h2>${classPicker()}
-      ${sec === 'jour' ? `<h3>Leçon du jour</h3><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(n=>`<button class="lp ${n===cur?'on':''}" data-action="setCurrent" data-n="${n}" title="${esc(themeName(thOf(n)))}"><span>${n}</span><small>${THEMES[thOf(n)].ico}</small></button>`).join('')}</div>
+      ${sec === 'jour' || sec === 'recup' ? `<h3>Leçon du jour</h3><div class="lesson-picker">${Array.from({length:N},(_,i)=>i+1).map(n=>`<button class="lp ${n===cur?'on':''} ${isDone(n)?'lk':''}" data-action="setCurrent" data-n="${n}" title="${esc(themeName(thOf(n)))}"><span>${n}</span><small>${THEMES[thOf(n)].ico}</small></button>`).join('')}</div>
         <div class="muted" style="font-weight:800;margin-top:4px">${esc(lessonTitle(cur))}${lessonPils(cur).length ? ' · ' + lessonPils(cur).map(p => p.ico + ' ' + esc(p.n)).join(' · ') : ''}</div>` : ''}</div>
-    ${P.tabs.length ? subTabs(P.tabs.filter(([k]) => k !== 'tirage' || thOf(cur) === 'coach').filter(([k]) => k !== 'evalJ' || ['evi','evf','coach'].includes(thOf(cur)))) : ''}`;
+    ${sec === 'jour' || sec === 'recup' ? flowBar(cur) : ''}
+    ${P.tabs.length ? subTabs(P.tabs.filter(([k]) => sec !== 'jour' || !FLOW.some(f => f[0] === k)).filter(([k]) => k !== 'tirage' || thOf(cur) === 'coach').filter(([k]) => k !== 'evalJ' || ['evi','evf','coach'].includes(thOf(cur)))) : ''}`;
 }
 function viewProf(){
   let t = UI.profTab || 'menu';
   if (t === 'menu' || PREDIR[t]) { UI.profTab = 'menu'; return profMenu(); }
   const sec = sectOf(t); if (!sec) { UI.profTab = 'menu'; return profMenu(); }
   const B = { classes: () => profClasses() + profEleves(), groupes: profGroupes, cycle: profCycle, piliers: profPiliers, mobiles: profMobiles, machines: profMachines, roles: profRoles,
-    appel: profAppel, hs: profHS, tirage: profTirage, evalJ: () => profEvals(curLesson()), qr: profSeanceQR, recup: profRecup,
+    lecon: profLecon, fin: profFin, appel: profAppel, hs: profHS, tirage: profTirage, evalJ: () => profEvals(curLesson()), qr: profSeanceQR, recup: profRecup,
     maxes: profMaxes, bilanL: profBilanL, evals: () => profEvals(), coachB: profCoachB, export: () => profExport() + profTransfert() };
   return sectHeader(sec) + (B[t] ? B[t]() : '');
+}
+function todayCard(n){
+  const L = lesson(n), st = lessonStatus(n), T = THEMES[thOf(n)];
+  const b = L.done ? `<button class="btn primary" data-action="nextLesson">➡️ Préparer la leçon ${Math.min(n + 1, S.settings.nbLessons)}</button>`
+    : L.started ? `<button class="btn primary" data-action="profTab" data-tab="${UI.flowTab || 'appel'}">▶️ Reprendre la leçon</button><button class="btn" data-action="profTab" data-tab="recup">📥 Récupérer</button><button class="btn green" data-action="profTab" data-tab="fin">🏁 Terminer</button>`
+    : `<button class="btn" data-action="profTab" data-tab="lecon">📝 Préparer la leçon</button><button class="btn primary" data-action="startLesson">▶️ Commencer la leçon</button>`;
+  return `<div class="card strong today"><div class="row"><div class="grow"><b style="font-size:18px">📍 Leçon ${n}/${S.settings.nbLessons} · ${T.ico} ${esc(T.n)}</b> <span class="st st-${st.k}">${st.t}</span></div><div class="btn-row">${b}</div></div></div>`;
 }
 function profMenu(){
   const n = curLesson(), pres = S.students.filter(s => present(n, s.id)).length;
   const got = S.students.filter(s => lessonState(n, s.id).any).length;
   return `<div class="card strong compact center"><b style="font-size:20px">🏫 ${esc(className())}</b> · ${esc(lessonLabel(n))} · ${pres}/${S.students.length} présent(s) · ${got} fiche(s) reçue(s)</div>
+    ${todayCard(n)}
     <div class="pmenu steps">
       <button class="pm-btn" data-action="profTab" data-tab="cycle"><span class="step">1</span><span class="ico">🛠</span>Préparer le cycle<small>Élèves · groupes · leçons, thèmes et piliers · machines · rôles</small></button>
-      <button class="pm-btn" data-action="profTab" data-tab="appel"><span class="step">2</span><span class="ico">📅</span>Leçon du jour<small>Appel · inaptitudes · machines HS · 📲 QR</small></button>
+      <button class="pm-btn" data-action="profTab" data-tab="lecon"><span class="step">2</span><span class="ico">📅</span>Leçon du jour<small>Préparer · commencer : appel puis 📲 QR · terminer</small></button>
       <button class="pm-btn" data-action="profTab" data-tab="recup"><span class="step">3</span><span class="ico">📥</span>Récupérer les saisies<small>Tablettes élèves · Hippopogramme</small></button>
       <button class="pm-btn" data-action="profTab" data-tab="suiviP"><span class="step">4</span><span class="ico">📊</span>Suivi et bilans<small>Fiches élèves · max · évaluations · coach d'un jour · export</small></button>
     </div>
@@ -1308,16 +1318,16 @@ function profMenu(){
 /* ---------------------------------------------------------------------
    Préparer : cycle & leçons
    --------------------------------------------------------------------- */
-function profCycle(){
-  const N = S.settings.nbLessons, cur = curLesson();
-  let rows = '';
-  for (let n = 1; n <= N; n++) {
+/* une leçon : réglages modifiables (cycle = grandes lignes ; leçon du jour = détail) ou résumé figé si la leçon est terminée */
+function lessonRow(n, full){
+  const cur = curLesson();
+  if (lesson(n).done) return lockedRow(n, full);
     const L = lesson(n), th = L.th, T = THEMES[th], mp = maxPils(n);
     const pilChips = piliers().filter(p => !p.prof && (!p.secu || th === 'evf' || L.pil.includes(p.id))).map(p => `<button class="pchip ${L.pil.includes(p.id) ? 'on' : ''}" data-action="pilToggle" data-n="${n}" data-p="${p.id}">${p.ico} ${esc(p.n)}</button>`).join('');
     const crit = th === 'evf' && L.pil.length ? `<div class="crit-box"><b>Critères retenus pour l'évaluation finale</b>${L.pil.map(id => { const p = pilier(id); if (!p) return ''; const keep = L.crit[id];
       return `<div class="crit-row"><span>${p.ico} ${esc(p.n)}</span>${p.cr.map((c, i) => `<button class="cchip ${!keep || !keep.length || keep.includes(i) ? 'on' : ''}" data-action="critToggle" data-n="${n}" data-p="${id}" data-i="${i}">${esc(c)}</button>`).join('')}</div>`; }).join('')}</div>` : '';
     const W = L.wu;
-    rows += `<div class="lrow"><div class="lesson-num ${n===cur?'cur':''}" style="background:${T.c}">${n}</div><div class="lrow-main">
+    return `<div class="lrow ${full ? 'full' : ''}"><div class="lesson-num ${n===cur?'cur':''}" style="background:${T.c}">${n}</div><div class="lrow-main">${statusLine(n, full)}
       <div class="lrow-top"><label class="pil-sel">${T.ico}<select data-field="th" data-n="${n}">${THEME_IDS.map(k => `<option value="${k}" ${th===k?'selected':''}>${esc(THEMES[k].n)}</option>`).join('')}</select></label>
         <label class="pil-sel">👀<select data-field="suivi" data-n="${n}"><option value="s" ${L.suivi==='s'?'selected':''}>Suivi série par série</option><option value="e" ${L.suivi==='e'?'selected':''}>Suivi par exercice (fin d'exercice)</option></select></label>
         <button class="tgl ${W.t !== 'none' ? 'on' : ''}" data-action="wuOnOff" data-n="${n}">🔥 Échauffement : <b>${W.t !== 'none' ? 'oui' : 'non'}</b></button>
@@ -1327,9 +1337,12 @@ function profCycle(){
           <label class="pil-sel">⏱<select data-field="wuDur" data-n="${n}">${[30,45,60].map(v => `<option value="${v}" ${+W.dur===v?'selected':''}>${v} s</option>`).join('')}</select></label>` : ''}</div>
       ${L.obs === false ? `<div class="lrow-pil muted" style="font-weight:800">Pas d'observateur : l'élève remplit seul sa fiche (répétitions, charge, ressenti), sans notes de piliers.${th === 'evf' || th === 'evi' ? ' Vos piliers d\'évaluation restent : ' + (L.pil.map(id => pilier(id)?.ico + ' ' + pilier(id)?.n).join(' · ') || 'aucun') : ''}</div>${th === 'evf' || th === 'evi' ? `<div class="lrow-pil">${pilChips}</div>` : ''}`
         : `<div class="lrow-pil"><span class="muted" style="font-weight:800">${th === 'evf' ? 'Piliers évalués (dont 🛡️ Sécurité) :' : `Piliers (${L.pil.length}/${mp}) :`}</span> ${pilChips}</div>${crit}`}</div></div>`;
-  }
+}
+function profCycle(){
+  const N = S.settings.nbLessons;
+  let rows = ''; for (let n = 1; n <= N; n++) rows += lessonRow(n, false);
   return `<div class="card strong compact"><div class="row"><div class="rf"><div class="rf-h"><span class="rf-l">📅 Nombre de leçons</span></div>${stepper('nbLessons','',N)}</div>
-      <div class="muted grow" style="font-weight:700">Pour chaque leçon : le thème, 1 ou 2 piliers observés par un camarade, le mode de suivi (selon le nombre de tablettes) et l'échauffement.</div></div></div>
+      <div class="muted grow" style="font-weight:700">Les grandes lignes du cycle : thème, piliers, suivi, échauffement et observateur de chaque leçon. Le jour J, ajustez la leçon dans 📅 Leçon du jour → 📝 Préparer la leçon : les changements s'inscrivent ici. Une leçon terminée est figée 🔒.</div></div></div>
     <div class="card compact"><h2>Leçons</h2>${rows}</div>
     <div class="card compact"><h2>📖 Les mobiles</h2><table class="simple"><tr><th>Mobile</th><th>Séries × rép.</th><th>Charge</th><th>Récup</th><th>Rythme</th><th>Organisation</th></tr>
       ${MOB_IDS.map(k => { const M = MOB[k]; return `<tr><td><b>${M.ico} ${esc(M.n)}</b></td><td>${M.s} × ${M.r}</td><td>${M.pctLow ? M.pctLow + ' à ' : ''}${M.pct} %</td><td>${fmtRest(M.rest)}</td><td>${esc(M.ry)}</td><td>${esc(M.d.split(' · ')[0])}${M.inter ? ' · 6 min ' + (M.inter === 'endu' ? 'endurance' : 'cardio') + ' entre les exercices' : ''}</td></tr>`; }).join('')}</table>
@@ -1373,7 +1386,7 @@ function profAppel(){
         <div class="btn-row"><button class="btn ${a==='abs'?'abs-on':''}" data-action="att" data-sid="${s.id}" data-v="abs">Absent</button>
         <button class="btn ${a==='disp'?'disp-on':''}" data-action="att" data-sid="${s.id}" data-v="disp">Dispensé</button>
         <button class="btn ${a==='inap'?'inapte-on':''}" data-action="att" data-sid="${s.id}" data-v="inap">Inapte partiel</button></div>
-        ${a === 'inap' ? `<button class="btn small well-btn" data-action="appelWell" data-sid="${s.id}">🩹 ${z.length ? `<b style="color:#D0161B">${esc(z.map(zoneName).join(', '))}</b>` : 'Choisir les zones'}</button>` : ''}</div>`; }).join('')}</div>`;
+        ${a === 'inap' ? `<button class="btn small well-btn" data-action="appelWell" data-sid="${s.id}">🩹 ${z.length ? `<b style="color:#D0161B">${esc(z.map(zoneName).join(', '))}</b>` : 'Choisir les zones'}</button>` : ''}</div>`; }).join('')}</div>` + flowNext('qr', '📲 Suivant : QR de la leçon pour les tablettes');
 }
 function appelWellModal(sid){
   const n = curLesson(), L = lesson(n);
@@ -1393,6 +1406,7 @@ function appelWellModal(sid){
     if (sel.length) { L.z[sid] = sel; if (!L.att[sid]) L.att[sid] = 'inap'; } else { delete L.z[sid]; if (L.att[sid] === 'inap') delete L.att[sid]; }
     save(); closeModal(); render(); };
 }
+const flowNext = (tab, lab) => lesson(curLesson()).started && !isDone(curLesson()) ? `<div class="flow-next"><button class="btn primary big-next" data-action="profTab" data-tab="${tab}">${lab} →</button></div>` : '';
 function profHS(){
   const n = curLesson(), L = lesson(n);
   return `<div class="card strong"><h2>🚫 Machines hors service · Leçon ${n}</h2><div class="muted" style="font-weight:700">Une machine hors service n'apparaît plus dans les choix des élèves pour cette leçon (à faire avant d'afficher le QR).</div></div>
@@ -1413,7 +1427,7 @@ function profSeanceQR(){
       <div class="muted" style="font-weight:700">${esc(lessonTitle(n))} · ${S.students.length} élève(s) · ${off} absent(s)/dispensé(s) · ${lesson(n).hs.length} machine(s) HS · les max de chaque élève sont transmis.</div>
       <div class="advice info">Sur chaque tablette élève : <b>📷 Scanner la leçon</b>. Faites l'appel, déclarez les machines HS${thOf(n) === 'coach' ? ' et tirez les rôles' : ''} <b>avant</b> d'afficher ce QR.</div>
       <div id="qr-seance" class="center">Préparation…</div>
-      <div class="btn-row" style="justify-content:center;margin-top:10px"><button class="btn small" data-action="fileSeance">📤 Partager la leçon en fichier</button></div></div>`;
+      <div class="btn-row" style="justify-content:center;margin-top:10px"><button class="btn small" data-action="fileSeance">📤 Partager la leçon en fichier</button></div></div>` + flowNext('recup', '📥 Suivant : récupérer les saisies');
 }
 
 /* ---------------------------------------------------------------------
@@ -1451,6 +1465,64 @@ function profEvals(fixed){
           <input type="range" min="1" max="10" step="1" value="${v ?? 5}" class="${v == null ? 'unset' : ''}" data-field="evV" data-n="${n}" data-sid="${s.id}" data-p="${id}" style="--rc:${v ? scaleColor(v) : '#C9D1E0'}">
           <b class="ev-v" style="background:${v ? scaleColor(v) : '#fff'};color:${v ? scaleText(v) : '#5B6478'}">${v ?? '–'}</b></div>`; }).join('')}${th === 'evi' ? evExtra(n, s.id) : ''}</div>`; }).join('')}</div>`;
 }
+/* =====================================================================
+   Déroulé d'une leçon : 📝 Préparer → ▶️ Commencer (appel → QR) → 📥 Récupérer → 🏁 Terminer (leçon figée 🔒)
+   ===================================================================== */
+const isDone = n => !!lesson(n).done;
+function guardLock(n){ if (isDone(n)) { toast('🔒 Leçon terminée : elle est figée. Touchez « 🔓 Rouvrir » pour la modifier.', 3500); return true; } return false; }
+const FLOW = [['lecon','📝','Préparer'],['appel','✅','Appel'],['qr','📲','QR des tablettes'],['recup','📥','Récupérer'],['fin','🏁','Terminer']];
+function lessonStatus(n){ const L = lesson(n);
+  return L.done ? { k:'done', t:`🔒 Terminée le ${new Date(L.done).toLocaleDateString('fr-FR')}` } : L.started ? { k:'run', t:'▶️ En cours' } : { k:'todo', t:'📝 À préparer' }; }
+function statusLine(n, full){
+  const st = lessonStatus(n), cur = n === curLesson();
+  return `<div class="lstat"><span class="st st-${st.k}">${st.t}</span>${cur ? '<span class="st st-cur">📍 Leçon du jour</span>' : ''}
+    ${!full ? (cur ? `<button class="btn small" data-action="profTab" data-tab="lecon">📝 Préparer en détail</button>` : `<button class="btn small ghost" data-action="goLesson" data-n="${n}">📍 En faire la leçon du jour</button>`) : ''}</div>`;
+}
+function flowBar(n){
+  const L = lesson(n), done = isDone(n), t = UI.profTab, idx = FLOW.findIndex(f => f[0] === t);
+  return `<div class="flow">${FLOW.map(([k, ico, lab], i) => { const past = done || (L.started && i < Math.max(idx, 1)) || (L.started && i === 0);
+    return `<button class="fl ${k === t ? 'on' : ''} ${past ? 'ok' : ''}" data-action="profTab" data-tab="${k}"><span>${past && k !== t ? '✓' : ico}</span>${lab}</button>${i < FLOW.length - 1 ? '<span class="fl-sep">›</span>' : ''}`; }).join('')}</div>`;
+}
+/* résumé figé d'une leçon terminée */
+function lockedRow(n, full){
+  const L = lesson(n), T = THEMES[L.th], P = lessonPils(n), pres = S.students.filter(s => present(n, s.id)).length, got = S.students.filter(s => lessonState(n, s.id).any).length;
+  return `<div class="lrow locked ${full ? 'full' : ''}"><div class="lesson-num" style="background:${T.c}">${n}</div><div class="lrow-main">${statusLine(n, full)}
+    <div class="lock-sum"><b>${T.ico} ${esc(T.n)}</b> · ${L.suivi === 'e' ? 'suivi par exercice' : 'suivi série par série'} · 🔥 ${L.wu.t === 'none' ? 'pas d\'échauffement' : esc(WU_TYPES[L.wu.t])} · 👀 ${L.obs === false ? 'sans observateur' : 'avec observateur'}${L.hs.length ? ' · 🚫 ' + L.hs.map(mName).join(', ') : ''}</div>
+    ${P.length ? `<div class="lock-sum muted">${P.map(p => `${p.ico} ${esc(p.n)} <small>(${p.cr.map(esc).join(' · ')})</small>`).join(' · ')}</div>` : ''}
+    <div class="lock-sum muted">${pres} présent(s) · ${got} fiche(s) · les saisies reçues en retard sont encore ajoutées, les réglages ne bougent plus.</div>
+    <div class="btn-row"><button class="btn small" data-action="bilGo" data-n="${n}">🔎 Bilan de la leçon</button><button class="btn small ghost" data-action="reopen" data-n="${n}">🔓 Rouvrir</button></div></div></div>`;
+}
+/* 📝 Préparer la leçon du jour (les modifications s'inscrivent dans le cycle) */
+function profLecon(){
+  const n = curLesson(), L = lesson(n), th = thOf(n);
+  let h = `<div class="advice info">Les changements faits ici modifient directement le cycle (leçon ${n}). Ensuite : <b>▶️ Commencer la leçon</b> → appel → QR pour les tablettes.</div>` + lessonRow(n, true);
+  if (!L.done) {
+    h += profHS();
+    if (th === 'coach') h += `<div class="card compact"><div class="row"><b class="grow">🎭 Coach d'un jour : ${Object.keys(L.role).length} rôle(s) tiré(s)</b><button class="btn small" data-action="profTab" data-tab="tirage">🎲 Tirage des rôles</button></div></div>`;
+    h += `<div class="flow-next"><button class="btn primary big-next" data-action="startLesson">▶️ Commencer la leçon ${n}</button></div>`;
+  } else h += `<div class="flow-next"><button class="btn primary big-next" data-action="nextLesson">➡️ Préparer la leçon ${Math.min(n + 1, S.settings.nbLessons)}</button></div>`;
+  return h;
+}
+/* 🏁 Terminer la leçon : bilan rapide puis leçon figée */
+function profFin(){
+  const n = curLesson(), L = lesson(n), list = sortedStudents().filter(s => present(n, s.id));
+  const got = list.filter(s => lessonState(n, s.id).any), miss = list.filter(s => !lessonState(n, s.id).any);
+  if (L.done) return `<div class="card strong center"><h2>🔒 Leçon ${n} terminée le ${new Date(L.done).toLocaleDateString('fr-FR')} à ${new Date(L.done).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}</h2>
+      <div class="btn-row" style="justify-content:center"><button class="btn primary" data-action="nextLesson">➡️ Préparer la leçon ${Math.min(n + 1, S.settings.nbLessons)}</button><button class="btn" data-action="bilGo" data-n="${n}">🔎 Bilan de la leçon</button><button class="btn ghost" data-action="reopen" data-n="${n}">🔓 Rouvrir</button></div></div>`;
+  return `<div class="card strong"><h2>🏁 Terminer la leçon ${n}</h2>
+      <div class="muted" style="font-weight:700">Une fois terminée, la leçon est <b>figée</b> : thème, piliers, critères observés, mobiles, appel et machines ne bougent plus (même si vous modifiez ensuite les piliers ou les mobiles pour la suite du cycle). Les saisies qui arriveraient en retard seront quand même ajoutées.</div>
+      <div class="recv-prog" style="margin-top:8px"><div class="rp-bar"><span style="width:${list.length ? Math.round(got.length / list.length * 100) : 0}%"></span></div><div class="rp-txt"><b>${got.length} / ${list.length}</b> fiches reçues</div></div>
+      ${miss.length ? `<div class="advice warn">⏳ Fiches manquantes : ${miss.map(s => esc(nameOf(s.id))).join(', ')}. <button class="btn small" data-action="profTab" data-tab="recup">📥 Récupérer les saisies</button></div>` : '<div class="advice good">✓ Toutes les fiches sont arrivées.</div>'}
+      <div class="flow-next"><button class="btn green big-next" data-action="finishLesson">🏁 Terminer et figer la leçon ${n}</button></div></div>`;
+}
+/* figer : on garde une copie des piliers (critères) et des mobiles tels qu'ils étaient */
+function finishLesson(n){
+  const L = lesson(n);
+  L.pilSnap = lessonPils(n);
+  L.mobSnap = Object.fromEntries(MOB_IDS.map(k => [k, { s:MOB[k].s, r:MOB[k].r, rest:MOB[k].rest, pct:MOB[k].pct, ...(MOB[k].pctLow ? { pctLow:MOB[k].pctLow } : {}), ry:MOB[k].ry, n:MOB[k].n }]));
+  L.done = now(); save();
+}
+const mobP = (n, k) => { const L = lesson(n); return L.done && L.mobSnap?.[k] ? { ...MOB[k], ...L.mobSnap[k] } : MOB[k]; };
 /* =====================================================================
    Suivi élève (tablette et prof), max de la classe, bilans, coach d'un jour
    ===================================================================== */
@@ -1565,7 +1637,7 @@ function profRecup(){
       <div id="scan-area"></div>
       <div class="btn-row" style="justify-content:center;margin-top:12px"><button class="btn primary" data-action="profTab" data-tab="recup">↻ Actualiser</button>
         <label class="btn">📂 Importer un fichier (.json)<input type="file" id="file-sync" accept=".json,application/json" hidden></label></div></div>
-    <div class="card strong" id="wait-box">${waitList()}</div></div>`;
+    <div class="card strong" id="wait-box">${waitList()}</div></div>` + flowNext('fin', '🏁 Suivant : terminer la leçon');
 }
 function profExport(){
   return `<div class="card strong"><h2>📊 Export Excel</h2><button class="btn green" data-action="exportXlsx">📊 Exporter en .xlsx</button>
@@ -2389,6 +2461,7 @@ function makeDemoFull(){
       r.ex.forEach((E, k) => { E.ts = r.ts + k * 60000; });
     });
   }
+  for (let n = 1; n <= 11; n++) finishLesson(n); lesson(12).started = now();
   S.settings.current = 12;
 }
 /* =====================================================================
@@ -2490,6 +2563,7 @@ function makeDemo(){
     }
   });
   lesson(4).hs = ['butterfly'];
+  [1, 2, 3].forEach(finishLesson);
 }
 
 /* =====================================================================
@@ -2499,7 +2573,7 @@ const A = {
   ...A_ELEVE,
   go: d => go(d.view),
   openProf: () => openProf(),
-  profTab: d => { UI.sel = null; UI.profTab = d.tab;
+  profTab: d => { UI.sel = null; UI.profTab = d.tab; if (['appel','qr','recup','fin'].includes(d.tab)) UI.flowTab = d.tab;
     if (PREDIR[d.tab]) { if (d.tab === 'saisieP') UI.filter = null; return go(PREDIR[d.tab]); }
     UI.view = 'prof'; render(); window.scrollTo(0,0); },
   toEleve: () => { ROOT.role = 'eleve'; UI.profUnlocked = false; UI.profTab = 'menu'; save(); go('home'); toast('🧒 Espace élève · retour enseignant : appui long sur le logo'); },
@@ -2527,15 +2601,22 @@ const A = {
   // prof : cycle
   setCurrent: d => { S.settings.current = +d.n; save(); render(); toast(`Leçon ${d.n} sélectionnée`); },
   nbLessons: d => { S.settings.nbLessons = Math.max(2, Math.min(30, S.settings.nbLessons + (+d.d))); if (S.settings.current > S.settings.nbLessons) S.settings.current = S.settings.nbLessons; save(); render(); },
-  pilToggle: d => { const L = lesson(+d.n), mp = maxPils(+d.n);
+  pilToggle: d => { if (guardLock(+d.n)) return; const L = lesson(+d.n), mp = maxPils(+d.n);
     if (L.pil.includes(d.p)) L.pil = L.pil.filter(x => x !== d.p);
     else if (L.pil.length >= mp) { if (mp === 2) { L.pil = [L.pil[1], d.p]; toast('2 piliers maximum : le plus ancien est retiré'); } else return toast(mp + ' piliers maximum'); }
     else L.pil.push(d.p); save(); render(); },
-  critToggle: d => { const L = lesson(+d.n), p = pilier(d.p); let k = L.crit[d.p]; if (!k || !k.length) k = p.cr.map((_, i) => i);
+  critToggle: d => { if (guardLock(+d.n)) return; const L = lesson(+d.n), p = pilier(d.p); let k = L.crit[d.p]; if (!k || !k.length) k = p.cr.map((_, i) => i);
     const i = +d.i; k = k.includes(i) ? k.filter(x => x !== i) : [...k, i].sort();
     if (!k.length) return toast('Gardez au moins un critère'); L.crit[d.p] = k.length === p.cr.length ? [] : k; save(); render(); },
-  wuOnOff: d => { const L = lesson(+d.n); if (L.wu.t !== 'none') { L.wuPrev = L.wu.t; L.wu = { ...L.wu, t:'none' }; } else L.wu = { t: L.wuPrev || 'circuit', nb: L.wu.nb || 6, dur: L.wu.dur || 30 }; save(); rerender(); },
-  obsOnOff: d => { const L = lesson(+d.n); L.obs = L.obs === false ? true : false; save(); rerender(); },
+  startLesson: () => { const n = curLesson(); if (guardLock(n)) return; const L = lesson(n); L.started = L.started || now(); save(); UI.profTab = 'appel'; UI.view = 'prof'; render(); window.scrollTo(0, 0); toast('▶️ Leçon ' + n + ' commencée : faites l\'appel'); },
+  finishLesson: async () => { const n = curLesson(); if (!(await confirmBox(`Terminer la leçon ${n} ?`, 'La leçon sera figée : thème, piliers, critères, mobiles, appel et machines ne bougeront plus. Les saisies en retard seront encore ajoutées.', 'Terminer et figer'))) return;
+    finishLesson(n); render(); toast('🔒 Leçon ' + n + ' terminée'); },
+  reopen: async d => { const n = +d.n; if (!(await confirmBox(`Rouvrir la leçon ${n} ?`, 'Ses réglages redeviennent modifiables. Pensez à la terminer de nouveau.', 'Rouvrir', true))) return; delete lesson(n).done; save(); render(); },
+  nextLesson: () => { const n = Math.min(curLesson() + 1, S.settings.nbLessons); S.settings.current = n; save(); UI.profTab = 'lecon'; UI.view = 'prof'; render(); window.scrollTo(0, 0); },
+  goLesson: d => { S.settings.current = +d.n; save(); UI.profTab = 'lecon'; render(); window.scrollTo(0, 0); },
+  bilGo: d => { UI.bilN = +d.n; UI.profTab = 'bilanL'; UI.view = 'prof'; render(); window.scrollTo(0, 0); },
+  wuOnOff: d => { if (guardLock(+d.n)) return; const L = lesson(+d.n); if (L.wu.t !== 'none') { L.wuPrev = L.wu.t; L.wu = { ...L.wu, t:'none' }; } else L.wu = { t: L.wuPrev || 'circuit', nb: L.wu.nb || 6, dur: L.wu.dur || 30 }; save(); rerender(); },
+  obsOnOff: d => { if (guardLock(+d.n)) return; const L = lesson(+d.n); L.obs = L.obs === false ? true : false; save(); rerender(); },
   mobReset: async () => { if (!(await confirmBox('Revenir aux valeurs proposées ?', 'Séries, répétitions, récupérations et pourcentages des 5 mobiles sont remis par défaut.', 'Rétablir', true))) return; ROOT.mob = null; applyMobParams(null); save(); render(); },
   pilReset: async () => { if (!(await confirmBox('Revenir aux observables proposés ?', 'Les noms et observables modifiés seront remplacés.', 'Rétablir', true))) return;
     ROOT.piliers = DEFAULT_PILIERS.map(p => ({ ...p, cr:[...p.cr] })); save(); render(); },
@@ -2544,12 +2625,12 @@ const A = {
   roleDel: async d => { const r = role(d.r); if (!r || !(await confirmBox('Supprimer « ' + esc(r.n) + ' » ?', '', 'Supprimer', true))) return; ROOT.roles = ROOT.roles.filter(x => x.id !== d.r); save(); render(); },
   roleReset: async () => { if (!(await confirmBox('Rôles proposés ?', 'La liste des rôles est remplacée par les 15 rôles proposés.', 'Rétablir', true))) return; ROOT.roles = DEFAULT_ROLES.map(r => ({ ...r })); save(); render(); },
   // prof : leçon du jour
-  att: d => { const L = lesson(curLesson()); L.att[d.sid] = L.att[d.sid] === d.v ? undefined : d.v; if (!L.att[d.sid]) delete L.att[d.sid];
+  att: d => { if (guardLock(curLesson())) return; const L = lesson(curLesson()); L.att[d.sid] = L.att[d.sid] === d.v ? undefined : d.v; if (!L.att[d.sid]) delete L.att[d.sid];
     if (L.att[d.sid] === 'inap' && !(L.z[d.sid] || []).length) { save(); return appelWellModal(d.sid); }
     if (L.att[d.sid] !== 'inap') delete L.z[d.sid]; save(); rerender(); },
-  appelWell: d => appelWellModal(d.sid),
-  hsToggle: d => { const L = lesson(curLesson()); L.hs = L.hs.includes(d.id) ? L.hs.filter(x => x !== d.id) : [...L.hs, d.id]; save(); rerender(); },
-  drawAll: async () => { const n = curLesson(), L = lesson(n);
+  appelWell: d => { if (guardLock(curLesson())) return; appelWellModal(d.sid); },
+  hsToggle: d => { if (guardLock(curLesson())) return; const L = lesson(curLesson()); L.hs = L.hs.includes(d.id) ? L.hs.filter(x => x !== d.id) : [...L.hs, d.id]; save(); rerender(); },
+  drawAll: async () => { const n = curLesson(), L = lesson(n); if (guardLock(n)) return;
     if (Object.keys(L.role).length && !(await confirmBox('Refaire le tirage ?', 'Les rôles déjà attribués seront remplacés.', 'Tirer au sort'))) return;
     const pool = [...ROOT.roles].sort(() => Math.random() - .5); let i = 0; L.role = {};
     sortedStudents().filter(s => present(n, s.id)).sort(() => Math.random() - .5).forEach(s => { L.role[s.id] = pool[i % pool.length].id; i++; });
@@ -2601,6 +2682,8 @@ document.addEventListener('change', e => {
   if (t.id === 'file-students' && t.files[0]) { importStudentsFile(t.files[0]); t.value=''; return; }
   if ((t.id === 'file-sync' || t.id === 'file-restore') && t.files[0]) { importSyncFile(t.files[0]); t.value=''; return; }
   const f = d.field; if (!f) return;
+  if (['th','suivi','wuT','wuNb','wuDur'].includes(f) && guardLock(+d.n)) { render(); return; }
+  if (f === 'roleOf' && guardLock(curLesson())) { render(); return; }
   if (f === 'className') { S.settings.className = t.value.trim() || 'Classe'; save(); render(); }
   if (f === 'th') { const L = lesson(d.n); L.th = t.value; if (L.th !== 'evf') { L.pil = L.pil.filter(id => !pilier(id)?.secu).slice(0, 2); } save(); render(); }
   if (f === 'suivi') { lesson(d.n).suivi = t.value === 'e' ? 'e' : 's'; save(); }

@@ -1079,3 +1079,19 @@ button.borg-l.on{color:var(--bf);box-shadow:0 0 0 2px #0A1633;font-weight:900}
 .tgl{min-height:34px;border:2px solid var(--line);border-radius:999px;background:#fff;padding:2px 12px;font-weight:700;font-size:13px;color:var(--grey)}
 .tgl.on{border-color:var(--green);background:var(--green-l);color:#0B4F1C}
 .inbox-tab td,.inbox-tab th{font-size:13px}
+/* v1.8.0 — déroulé de la leçon */
+.today{border-color:var(--orange)!important;background:#FFFBF3}
+.st{display:inline-block;font-size:12px;font-weight:900;border-radius:999px;padding:1px 9px;border:2px solid currentColor;margin-left:6px}
+.st-todo{color:var(--grey)} .st-run{color:#0062C4;background:var(--blue-l)} .st-done{color:#0B4F1C;background:var(--green-l)} .st-cur{color:#B45F00;background:var(--orange-l)}
+.lstat{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}
+.lstat .st{margin-left:0}
+.lrow.locked{opacity:.92;background:repeating-linear-gradient(135deg,#fff,#fff 10px,#F6F8FB 10px,#F6F8FB 20px)}
+.lrow.full{border:2px solid var(--navy);border-radius:var(--radius);padding:8px;background:#fff;margin-bottom:10px}
+.lock-sum{font-size:14px;font-weight:700;margin:2px 0}
+.lp.lk{border-style:dashed;opacity:.7}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 8px}
+.fl{display:inline-flex;align-items:center;gap:5px;min-height:34px;border:2px solid var(--line);border-radius:999px;background:#fff;padding:2px 12px;font-weight:800;font-size:14px;color:var(--grey)}
+.fl.ok{border-color:var(--green);color:#0B4F1C;background:var(--green-l)}
+.fl.on{border-color:var(--orange);background:var(--orange);color:#fff}
+.fl-sep{color:var(--line);font-weight:900}
+.flow-next{display:flex;justify-content:center;margin:12px 0}
